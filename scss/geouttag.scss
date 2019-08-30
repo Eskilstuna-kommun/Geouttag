@@ -1,0 +1,54 @@
+
+
+.geouttag-modal > .o-modal {
+    width: auto;
+    height: auto;
+}
+
+.export-btn{
+    background: #dbdbdb;
+    margin-top: 1.3rem;
+}
+
+.export-btn:disabled{
+    margin-top: 1.3rem;
+    background: #7b7979;
+    color: #c3bcbc;
+}
+
+.geouttag-red-warning{
+    border-left: solid 3px #d10303;
+    font-weight: bold;
+    margin: 0px 1.5rem;
+    display: none;
+    padding: .2rem;
+    border-radius: 2px;
+}
+
+.geouttag-yellow-warning{
+    border-left: solid 3px #e6e404a8;
+    font-weight: bold;
+    margin: 0px 1.5rem;
+    display: none;
+    padding: .2rem;
+    border-radius: 2px;
+}
+
+.geouttag-positionblock label{
+    margin: 0 .5rem;
+}
+
+/* The Close Button */
+.geouttag-close {
+    background-color: #555555;
+    color: white;
+    padding: .5rem 1rem;
+    font-size: 1rem;
+}
+
+    /*.geouttag-close:hover,
+    .geouttag-close:focus {
+        color: black;
+        text-decoration: none;
+        cursor: pointer;
+    }*/

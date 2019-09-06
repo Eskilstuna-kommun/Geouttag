@@ -221,9 +221,9 @@ const Geouttag = function Geouttag(options = {}) {
         let FMEscript = layers[layerType].filetypes[fileType];
   
         let d = new Date(); 
-        let url = `${url}/${FMEscript}?geom=POLYGON `
-        url += `((${x1Elem.value} ${y1Elem.value},${x1Elem.value} ${y2Elem.value},${x2Elem.value} ${y2Elem.value},${x2Elem.value} ${y1Elem.value}))`
-        url += 
+        let requestUrl = `${url}/${FMEscript}?geom=POLYGON `
+        requestUrl += `((${x1Elem.value} ${y1Elem.value},${x1Elem.value} ${y2Elem.value},${x2Elem.value} ${y2Elem.value},${x2Elem.value} ${y1Elem.value}))`
+        requestUrl += 
                 `&srs=EPSG:3010&productName=${layerType}`+
                 `&email=${emailElem.value}`+
                 `&id=${d.getTime()}`+
@@ -233,9 +233,9 @@ const Geouttag = function Geouttag(options = {}) {
         document.getElementById("ModalForm").style.display='none';    
         document.getElementById("ModalStatus").style.display='block';
 
-        fetch(url).catch((e) => console.log(e))
+        fetch(requestUrl).catch((e) => console.log(e))
 
-        console.log("REQ: ",url);
+        console.log("REQ: ",requestUrl);
     }
 
     function getCookie(cname) {  

@@ -44,10 +44,6 @@ const Geouttag = function Geouttag(options = {}) {
         let modalhtml = 
         `<form id="ModalForm" onsubmit="return false;">
             <div>
-                <h4>Välj kartlager och filtyp:</h4>
-                <br>
-            </div>
-            <div>
                 <label for="layer">
                     <span class="label">Välj lager: </span>
                     ${layerTypeSelect.render()}
@@ -359,7 +355,7 @@ const Geouttag = function Geouttag(options = {}) {
         render() {
  
             modal = Origo.ui.Modal({
-                title: `Välj det lager du vill exportera från vald area!`,
+                title: `Välj det lager du vill exportera från vald area`,
                 content: `${modalContent(x1,y1,x2,y2)}`,
                 target: viewer.getMain().getId(),
                 cls: 'geouttag-modal'

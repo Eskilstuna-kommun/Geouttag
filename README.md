@@ -1,5 +1,7 @@
 # Geouttag
-Geouttag plugin for Origo using FME-services.
+Geouttag plugin for Origo using FME server Web Services.
+
+(Warning: Geouttag was last updated to function with release 2.2 of Origo)
 
 #### Example usage of Geouttag as plugin
 The plugin can be loaded like this in an html-file:

@@ -1,7 +1,7 @@
 # Geouttag
 Geouttag plugin for Origo using FME server Web Services.
 
-(Warning: Geouttag was last updated to function with release 2.2 of Origo however this functionality is at present unverified. The only known running instance is together with a late 2019 version of Origo, likely 2.0.1. Further development is uncertain )
+(<i>Warning: Geouttag was last updated to function with release 2.2 of Origo however this functionality is at present unverified. The only known running instance is together with a late 2019 version of Origo, likely 2.0.1. Further development is uncertain</i> )
 
 #### Example usage of Geouttag as plugin
 The plugin can be loaded like this in an html-file:

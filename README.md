@@ -1,13 +1,13 @@
 # Geouttag
-Geouttag plugin for Origo using FME server Web Services.
+Geouttag plugin for Origo using FME server Web Services. The user may draw a rectangle over the area to be exported, as well as choose a list of predefined layers/data sources to export.
 
-(<i>Is compatible with EK-extern and origo-map v2.3.1</i>)
+(<i>Is compatible with Origo v2.9</i>)
 
 Geouttag is only used without any other plugins so the functionality can not be guaranteed if such use.
 
 #### Example usage of Geouttag as plugin
 The plugin can be loaded like this in an html-file:
-```
+```html
         <head>
 	...
 	<link href="plugins/geouttag.css" rel="stylesheet">

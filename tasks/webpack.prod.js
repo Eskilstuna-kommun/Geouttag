@@ -1,6 +1,6 @@
-const webpack = require('webpack');
-const  { merge } = require('webpack-merge');
-const MiniCssExtractPlugin = require("mini-css-extract-plugin");
+const { merge } = require('webpack-merge');
+const autoprefixer = require('autoprefixer');
+const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const common = require('./webpack.common.js');
 
 module.exports = merge(common, {
@@ -25,30 +25,30 @@ module.exports = merge(common, {
         use: [
           {
             loader: MiniCssExtractPlugin.loader
-          },       
+          },
           {
-            loader: "css-loader"
+            loader: 'css-loader'
           },
           {
             loader: 'postcss-loader',
             options: {
               plugins: [
-                require('autoprefixer')({
+                new autoprefixer({
                   env: '> 0.25%, not dead'
                 })
               ]
             }
-          },                    
+          },
           {
-            loader: "sass-loader"     
-          }       
+            loader: 'sass-loader'
+          }
         ]
-      }       
+      }
     ]
   },
   plugins: [
     new MiniCssExtractPlugin({
-      filename: "../css/export.css"    
-    })    
+      filename: '../css/export.css'
+    })
   ]
 });

@@ -3,7 +3,7 @@ const common = require('./webpack.common.js');
 
 module.exports = merge(common, {
   output: {
-    path: `${__dirname}/../../origo/plugins`,
+    path: `${__dirname}/../../Ek-extern-2023/plugins`,
     publicPath: '/build/js',
     filename: 'geouttag.js',
     libraryTarget: 'var',
@@ -17,18 +17,18 @@ module.exports = merge(common, {
         test: /\.scss$/,
         use: [
           {
-            loader: "style-loader"
-          },            
+            loader: 'style-loader'
+          },
           {
-            loader: "css-loader"
-          },          
+            loader: 'css-loader'
+          },
           {
-            loader: "sass-loader"     
+            loader: 'sass-loader'
           }
         ]
-      }      
+      }
     ]
-  },  
+  },
   devServer: {
     static: './',
     port: 9008,

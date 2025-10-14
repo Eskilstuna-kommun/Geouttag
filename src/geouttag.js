@@ -1,48 +1,47 @@
-import Draw from 'ol/interaction/Draw';
+/* eslint-disable no-console */
+import Draw, { createBox } from 'ol/interaction/Draw';
 import VectorSource from 'ol/source/Vector';
-import { createBox } from 'ol/interaction/Draw';
+
 import { Style, Fill, Stroke, Text } from 'ol/style';
-import "Origo";
+import 'Origo';
 
-
-/*Geouttag is a tool to request FME server to
-     export data from a marked area in map*/
+/* Geouttag is a tool to request FME server to
+     export data from a marked area in map */
 const Geouttag = function Geouttag(options = {}) {
-    let {
-        target,
-        url = "",
-        contactmail = "",
-        filepath = "",
-        infolink = "",
-        logo = "",
-        warninglimit,
-        warningtooltip = "varning",
-        warningtext = "varning",
-        errorlimit,
-        errortooltip = "error",
-        errortext = "error",
-        infotext = "",
-        layers = {}
-    } = options;
+  const {
+    target,
+    url = '',
+    contactmail = '',
+    filepath = '',
+    infolink = '',
+    logo = '',
+    warninglimit,
+    warningtooltip = 'varning',
+    warningtext = 'varning',
+    errorlimit,
+    errortooltip = 'error',
+    errortext = 'error',
+    infotext = '',
+    layers = {}
+  } = options;
 
-    let viewer;
-    let modal;
-    let measureStyleOptions;
-    let map;
-    let projectionCode;
-    let draw;
-    let x1,y1,x2,y2;
-    let closeBtn;
-    let exportBtn;
-    let layerTypeSelect;
-    let fileTypeSelect;
-    let initLayer;
-    let restrictedLayers;
+  let viewer;
+  let modal;
+  let measureStyleOptions;
+  let map;
+  let projectionCode;
+  let draw;
+  let x1; let y1; let x2; let y2;
+  let closeBtn;
+  let exportBtn;
+  let layerTypeSelect;
+  let fileTypeSelect;
+  let initLayer;
+  let restrictedLayers;
 
-    /*returns html string of modal content*/
-    function modalContent(x1, y1, x2, y2){
-        let modalhtml = 
-        `<form id="ModalForm" onsubmit="return false;">
+  /* returns html string of modal content */
+  function modalContent(xMin, yMin, xMax, yMax) {
+    const modalhtml = `<form id="ModalForm" onsubmit="return false;">
             <div>
                 <label for="layer">
                     <span class="label">Välj lager: </span>
@@ -60,22 +59,22 @@ const Geouttag = function Geouttag(options = {}) {
                 <div class="flex">
                     <label for="X1">
                         <span class="label">X1: </span>
-                        <input type="text" id="X1" name="X1" value=${x1}>
+                        <input type="text" id="X1" name="X1" value=${xMin}>
                     </label>
                     <label for="Y1">
                         <span class="label">Y1: </span>
-                        <input type="text" id="Y1" name="Y1" value=${y1}>
+                        <input type="text" id="Y1" name="Y1" value=${yMin}>
                     </label>
                 </div>
                 <br>
                 <div class="flex">
                     <label for="X2">
                         <span class="label">X2: </span>
-                        <input type="text" id="X2" name="X2" value=${x2}>
+                        <input type="text" id="X2" name="X2" value=${xMax}>
                     </label>
                     <label for="Y2">
                         <span class="label">Y2: </span>
-                        <input type="text" id="Y2" name="Y2" value=${y2}>
+                        <input type="text" id="Y2" name="Y2" value=${yMax}>
                     </label>
                 </div>
             </div>
@@ -125,268 +124,261 @@ const Geouttag = function Geouttag(options = {}) {
             <br>
             <br>
             ${closeBtn.render()}
-        </div>`
+        </div>`;
 
-        return modalhtml;
+    return modalhtml;
+  }
+
+  /* Apply some restrictions on layers */
+  function restrictExport(selValue) {
+    let area = (x2 - x1) * (y2 - y1);
+    area = area < 0 ? -area : area;
+
+    if (restrictedLayers.includes(selValue)) {
+      if (area > errorlimit) {
+        document.getElementById('geouttag-red-warning').style.display = 'inline';
+        document.getElementById(exportBtn.getId()).disabled = true;
+      } else if (area > warninglimit) {
+        document.getElementById('geouttag-yellow-warning').style.display = 'inline';
+      }
+    } else {
+      document.getElementById(exportBtn.getId()).disabled = false;
+      document.getElementById('geouttag-yellow-warning').style.display = 'none';
+      document.getElementById('geouttag-red-warning').style.display = 'none';
+    }
+  }
+
+  /* Shows available filetype in dropdown for selected layer */
+  function addFiletypes(selValue) {
+    const currFiletypes = layers[selValue].filetypes;
+    let optionsHtml = '';
+    Object.keys(currFiletypes).forEach((filetype) => {
+      optionsHtml += `<option value="${filetype}">${filetype}</option>`;
+    });
+
+    document.getElementById(fileTypeSelect.getId()).innerHTML = optionsHtml;
+  }
+
+  /* Get available layers to select in dropdown */
+  function getOptions() {
+    let html = '';
+    Object.keys(layers).forEach((layer) => {
+      html += `<option value="${layer}">${layers[layer].title}</option>`;
+    });
+    return html;
+  }
+
+  function validateData(n) {
+    return !(n.length < 1);
+  }
+
+  function validateEmail(email) {
+    const re = /^(([^<>()\]\\.,;:\s@"]+(\.[^<>()\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
+    return re.test(email);
+  }
+
+  function setCookie(cname, cvalue, exdays) {
+    const d = new Date();
+    d.setTime(d.getTime() + (exdays * 24 * 60 * 60 * 1000));
+    const expires = `expires=${d.toUTCString()}`;
+    document.cookie = `${cname}=${cvalue};${expires};path=/`;
+  }
+
+  /* Collect data from elements and send request to server */
+  function sendData() {
+    const x1Elem = document.getElementById('X1');
+    const x2Elem = document.getElementById('X2');
+    const y1Elem = document.getElementById('Y1');
+    const y2Elem = document.getElementById('Y2');
+    const emailElem = document.getElementById('email');
+    let incorrectInput = false;
+
+    /* check if every text field is filled out correctly */
+    [x1Elem, x2Elem, y1Elem, y2Elem].forEach((elem) => {
+      const element = elem;
+      if (!validateData(elem.value)) {
+        element.style.backgroundColor = 'yellow';
+        incorrectInput = true;
+        return;
+      }
+      element.style.backgroundColor = 'white';
+    });
+
+    if (!validateEmail(emailElem.value)) {
+      emailElem.style.backgroundColor = 'yellow';
+      incorrectInput = true;
+    } else {
+      emailElem.style.backgroundColor = 'white';
     }
 
-    /*Apply some restrictions on layers*/
-    function restrictExport(selValue){
-        let area = (x2-x1) * (y2-y1);
-        area = area < 0 ? -area : area;
+    /* If any field were filled out incorrect then dont continue */
+    if (incorrectInput) return;
 
-        if(restrictedLayers.includes(selValue)){
-            if(area > errorlimit){
-                document.getElementById("geouttag-red-warning").style.display = "inline";
-                document.getElementById(exportBtn.getId()).disabled = true;
-            }
-            else if(area > warninglimit){
-                document.getElementById("geouttag-yellow-warning").style.display = "inline";
-            }
-        }
-        else{
-            document.getElementById(exportBtn.getId()).disabled = false;
-            document.getElementById("geouttag-yellow-warning").style.display = "none";
-            document.getElementById("geouttag-red-warning").style.display = "none";
-        }
+    setCookie('email', emailElem.value, 365);
+
+    /* Get the approtiate FMEscript name based on selected layers and filetype */
+    const layerType = document.getElementById(layerTypeSelect.getId()).value;
+    const fileType = document.getElementById(fileTypeSelect.getId()).value;
+    const FMEscript = layers[layerType].filetypes[fileType];
+
+    const d = new Date();
+    let requestUrl = `${url}/${FMEscript}?geom=POLYGON `;
+    requestUrl += `((${x1Elem.value} ${y1Elem.value},${x1Elem.value} ${y2Elem.value},${x2Elem.value} ${y2Elem.value},${x2Elem.value} ${y1Elem.value}))`;
+    requestUrl
+                += `&srs=EPSG:3010&productName=${layerType}`
+                + `&email=${emailElem.value}`
+                + `&id=${d.getTime()}`
+                + `&outputFormat=${fileType}`
+                + '&opt_servicemode=async';
+
+    document.getElementById('ModalForm').style.display = 'none';
+    document.getElementById('ModalStatus').style.display = 'block';
+
+    fetch(requestUrl).catch((e) => console.log(e));
+
+    console.log('REQ: ', requestUrl);
+  }
+
+  function getCookie(cname) {
+    const name = `${cname}=`;
+    const ca = document.cookie.split(';');
+    for (let i = 0; i < ca.length; i += 1) {
+      let c = ca[i];
+      while (c.charAt(0) === ' ') {
+        c = c.substring(1);
+      }
+      if (c.indexOf(name) === 0) {
+        return c.substring(name.length, c.length);
+      }
     }
+    return '';
+  }
 
-    /*Shows available filetype in dropdown for selected layer*/
-    function addFiletypes(selValue){  
-        let currFiletypes = layers[selValue].filetypes;
-        let optionsHtml = ""; 
-        for(let filetype in currFiletypes){
-            optionsHtml += `<option value="${filetype}">${filetype}</option>`; 
-        }
-        document.getElementById(fileTypeSelect.getId()).innerHTML = optionsHtml;
-    }
+  /* Updates extent coordinates of rectangle */
+  function pointerMoveHandler(e) {
+    const feature = e.feature;
+    const coords = feature.getGeometry().getCoordinates()[0];
+    // Extract all x and y values
+    const xValues = coords.map(c => c[0]);
+    const yValues = coords.map(c => c[1]);
+    // Calculate min and max
+    x1 = Math.round(Math.min(...xValues));
+    x2 = Math.round(Math.max(...xValues));
+    y1 = Math.round(Math.min(...yValues));
+    y2 = Math.round(Math.max(...yValues));
+  }
 
-    /*Get available layers to select in dropdown*/
-    function getOptions(){
-        let html = ``
-        for (let layer in layers){
-            html += `<option value="${layer}">${layers[layer].title}</option>`; 
-        }
-        return html;
-    }
+  /* Creates the draw interaction for the map */
+  function makeDrawInteraction() {
+    /* type Circle with a createBox() function defines a rectangle */
+    const geometryFunction = createBox();
+    const selectbox = new Draw({
+      source: new VectorSource(),
+      type: 'Circle',
+      geometryFunction
+    });
+    return selectbox;
+  }
 
-    function validateData(n){  
-        return !(n.length<1);
-    }
-
-    function validateEmail(email){  
-        let re = /^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;  
-        return re.test(email);
-    }
-
-    /*Collect data from elements and send request to server*/
-    function sendData(e){
-        let x1Elem = document.getElementById("X1");
-        let x2Elem = document.getElementById("X2");
-        let y1Elem = document.getElementById("Y1");
-        let y2Elem = document.getElementById("Y2");
-        let emailElem = document.getElementById("email");
-        let incorrectInput = false;
-
-        /*check if every text field is filled out correctly*/
-        [x1Elem, x2Elem, y1Elem, y2Elem].forEach((elem) => {
-            if(!validateData(elem.value)){
-                elem.style.backgroundColor = "yellow";
-                incorrectInput = true;
-                return;
-            }
-            elem.style.backgroundColor="white";  
-        })
-
-        if (!validateEmail(emailElem.value)){    
-            emailElem.style.backgroundColor="yellow";
-            incorrectInput = true;
-        }
-        else{
-            emailElem.style.backgroundColor="white";   
-        }
-
-        /*If any field were filled out incorrect then dont continue*/
-        if(incorrectInput) return;
-
-        setCookie("email",emailElem.value,365);  
-
-        /*Get the approtiate FMEscript name based on selected layers and filetype*/
-        let layerType = document.getElementById(layerTypeSelect.getId()).value;
-        let fileType = document.getElementById(fileTypeSelect.getId()).value;
-        let FMEscript = layers[layerType].filetypes[fileType];
-  
-        let d = new Date(); 
-        let requestUrl = `${url}/${FMEscript}?geom=POLYGON `
-        requestUrl += `((${x1Elem.value} ${y1Elem.value},${x1Elem.value} ${y2Elem.value},${x2Elem.value} ${y2Elem.value},${x2Elem.value} ${y1Elem.value}))`
-        requestUrl += 
-                `&srs=EPSG:3010&productName=${layerType}`+
-                `&email=${emailElem.value}`+
-                `&id=${d.getTime()}`+
-                `&outputFormat=${fileType}`+
-                `&opt_servicemode=async`
-
-        document.getElementById("ModalForm").style.display='none';    
-        document.getElementById("ModalStatus").style.display='block';
-
-        fetch(requestUrl).catch((e) => console.log(e))
-
-        console.log("REQ: ",requestUrl);
-    }
-
-    function getCookie(cname) {  
-        let name = cname + "=";  
-        let ca = document.cookie.split(';');  
-        for(let i = 0; i < ca.length; i++) {    
-            let c = ca[i];    
-            while (c.charAt(0) == ' ') {      
-                c = c.substring(1);    
-            }    
-            if (c.indexOf(name) == 0) {      
-                return c.substring(name.length, c.length);    
-            }  
-        }  
-        return "";
-    }
-
-    function setCookie(cname, cvalue, exdays){ 
-        let d= new Date();  
-        d.setTime(d.getTime() + (exdays*24*60*60*1000));  
-        let expires = "expires="+ d.toUTCString();  
-        document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/"
-    }
-
-    /*Updates extent coordinates of rectangle*/
-    function pointerMoveHandler(e) {
-        let feature = e.feature;
-        let coords = feature.getGeometry().getCoordinates()[0];
-        // Extract all x and y values
-        let xValues = coords.map(c => c[0]);
-        let yValues = coords.map(c => c[1]);
-        // Calculate min and max
-        x1 = Math.round(Math.min(...xValues));
-        x2 = Math.round(Math.max(...xValues));
-        y1 = Math.round(Math.min(...yValues));
-        y2 = Math.round(Math.max(...yValues));
- 
-    };
-
-    /*Creates the draw interaction for the map*/
-    function makeDrawInteraction() {
-        /*type Circle with a createBox() function defines a rectangle*/
-        let geometryFunction = createBox();
-        let selectbox = new Draw({
-            source: new VectorSource(),
-            type: 'Circle',
-            geometryFunction
-        })
-        return selectbox;
-    };
-
-    // default style for the rectangle    
-    function createStyle() {
+  // default style for the rectangle
+  function createStyle() {
     return new Style({
-        fill: new Fill({
-            color: 'rgba(255, 255, 255, 0.4)',
-        }),
-        stroke: new Stroke({
-            color: '#ffcc33',
-            width: 2,
-        }),
-        text: new Text({
-            text: "Area att exportera",
-            font: '14px Calibri,sans-serif',
-            fill: new Fill({ color: '#000' }),
-            stroke: new Stroke({ color: '#fff', width: 3 }),
-            offsetY: -10,
-        }),
+      fill: new Fill({
+        color: 'rgba(255, 255, 255, 0.4)'
+      }),
+      stroke: new Stroke({
+        color: '#ffcc33',
+        width: 2
+      }),
+      text: new Text({
+        text: 'Area att exportera',
+        font: '14px Calibri,sans-serif',
+        fill: new Fill({ color: '#000' }),
+        stroke: new Stroke({ color: '#fff', width: 3 }),
+        offsetY: -10
+      })
     });
-}
+  }
 
+  return Origo.ui.Component({
+    name: 'geouttag',
+    onAdd(evt) {
+      viewer = evt.target;
+      map = viewer.getMap();
+      projectionCode = map.getView().getProjection();
 
-    return Origo.ui.Component({
-        name: 'geouttag',
-        onAdd(evt) {
-            viewer = evt.target;
-            map = viewer.getMap();
-            projectionCode = map.getView().getProjection();
+      draw = makeDrawInteraction();
 
-            draw = makeDrawInteraction();
+      draw.on('drawstart', (e) => {
+        const feature = e.feature;
+        feature.setStyle(createStyle());
+      });
 
-            draw.on("drawstart", (e) => {
-                let feature = e.feature;
-                feature.setStyle(createStyle());
-            });
+      // drawend is the only relevant event for the rectangle coordinates for the modal
+      draw.on('drawend', (e) => {
+        pointerMoveHandler(e);
+        this.render();
+      });
 
-            // drawend is the only relevant event for the rectangle coordinates for the modal
-            draw.on("drawend", (e) => {
-                pointerMoveHandler(e);
-                this.render()
-            });
+      map.addInteraction(draw);
 
-            map.addInteraction(draw);
-
-            closeBtn = Origo.ui.Button({
-                click(){
-                    modal.closeModal()
-                },
-                text: "Stäng Fönster",
-                cls: 'geouttag-close'
-            })
-            
-            exportBtn = Origo.ui.Button({
-                click() {
-                    sendData();
-                },
-                text: 'Starta Export',
-                style: 'margin-top: 1.3rem',
-                cls: 'export-btn'
-            })
-
-            layerTypeSelect = Origo.ui.Element({
-                tagName: "select",
-                innerHTML: `${getOptions()}`
-            })
-
-            fileTypeSelect = Origo.ui.Element({
-                tagName: "select"
-            })
-
-            this.addComponents([closeBtn, exportBtn, layerTypeSelect, fileTypeSelect]);
-
+      closeBtn = Origo.ui.Button({
+        click() {
+          modal.closeModal();
         },
-        onInit() {
-            //A way of getting first property in an object
-            for (initLayer in layers) break;
+        text: 'Stäng Fönster',
+        cls: 'geouttag-close'
+      });
 
-            restrictedLayers = [];
-            for (let layer in layers){
-                if(layers[layer].restricted){
-                    restrictedLayers.push(layer)
-                }
-            }
-            
+      exportBtn = Origo.ui.Button({
+        click() {
+          sendData();
         },
-        render() {
- 
-            modal = Origo.ui.Modal({
-                title: `Välj det lager du vill exportera från vald area`,
-                content: `${modalContent(x1,y1,x2,y2)}`,
-                target: viewer.getMain().getId(),
-                cls: 'geouttag-modal'
-            })
+        text: 'Starta Export',
+        style: 'margin-top: 1.3rem',
+        cls: 'export-btn'
+      });
 
-            document.getElementById("email").value=(getCookie("email"));
-            document.getElementById(layerTypeSelect.getId()).addEventListener('change', (e) => { 
-                addFiletypes(e.srcElement.value);
-                restrictExport(e.srcElement.value); 
-            })
-            addFiletypes(initLayer);
+      layerTypeSelect = Origo.ui.Element({
+        tagName: 'select',
+        innerHTML: `${getOptions()}`
+      });
 
-            this.dispatch('render'); 
+      fileTypeSelect = Origo.ui.Element({
+        tagName: 'select'
+      });
 
+      this.addComponents([closeBtn, exportBtn, layerTypeSelect, fileTypeSelect]);
+    },
+    onInit() {
+      // A way of getting first property in an object
+      initLayer = Object.keys(layers)[0];
+
+      restrictedLayers = [];
+      Object.keys(layers).forEach((layer) => {
+        if (layers[layer].restricted) {
+          restrictedLayers.push(layer);
         }
-    });
+      });
+    },
+    render() {
+      modal = Origo.ui.Modal({
+        title: 'Välj det lager du vill exportera från vald area',
+        content: `${modalContent(x1, y1, x2, y2)}`,
+        target: viewer.getMain().getId(),
+        cls: 'geouttag-modal'
+      });
+
+      document.getElementById('email').value = (getCookie('email'));
+      document.getElementById(layerTypeSelect.getId()).addEventListener('change', (e) => {
+        addFiletypes(e.target.value);
+        restrictExport(e.target.value);
+      });
+      addFiletypes(initLayer);
+
+      this.dispatch('render');
+    }
+  });
 };
 
 export default Geouttag;

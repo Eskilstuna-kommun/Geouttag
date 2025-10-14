@@ -1,7 +1,7 @@
 import Draw from 'ol/interaction/Draw';
 import VectorSource from 'ol/source/Vector';
-import Measure from './measure'
 import { createBox } from 'ol/interaction/Draw';
+import { Style, Fill, Stroke, Text } from 'ol/style';
 import "Origo";
 
 
@@ -256,11 +256,19 @@ const Geouttag = function Geouttag(options = {}) {
         document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/"
     }
 
-    /*Updates coordinates when clicking in map*/
+    /*Updates extent coordinates of rectangle*/
     function pointerMoveHandler(e) {
-        let coord = e.coordinate;
-        x2 = Math.round(coord[0]);
-        y2 = Math.round(coord[1]);
+        let feature = e.feature;
+        let coords = feature.getGeometry().getCoordinates()[0];
+        // Extract all x and y values
+        let xValues = coords.map(c => c[0]);
+        let yValues = coords.map(c => c[1]);
+        // Calculate min and max
+        x1 = Math.round(Math.min(...xValues));
+        x2 = Math.round(Math.max(...xValues));
+        y1 = Math.round(Math.min(...yValues));
+        y2 = Math.round(Math.max(...yValues));
+ 
     };
 
     /*Creates the draw interaction for the map*/
@@ -275,11 +283,26 @@ const Geouttag = function Geouttag(options = {}) {
         return selectbox;
     };
 
-    function createStyle(feature) {
-        let featureType = feature.getGeometry().getType();
-        let measureStyle = featureType == 'LineString' ? Origo.Style.createStyleRule(measureStyleOptions.linestring) : Origo.Style.createStyleRule(measureStyleOptions.polygon);
-        return measureStyle;
-    };
+    // default style for the rectangle    
+    function createStyle() {
+    return new Style({
+        fill: new Fill({
+            color: 'rgba(255, 255, 255, 0.4)',
+        }),
+        stroke: new Stroke({
+            color: '#ffcc33',
+            width: 2,
+        }),
+        text: new Text({
+            text: "Area att exportera",
+            font: '14px Calibri,sans-serif',
+            fill: new Fill({ color: '#000' }),
+            stroke: new Stroke({ color: '#fff', width: 3 }),
+            offsetY: -10,
+        }),
+    });
+}
+
 
     return Origo.ui.Component({
         name: 'geouttag',
@@ -290,21 +313,14 @@ const Geouttag = function Geouttag(options = {}) {
 
             draw = makeDrawInteraction();
 
-            map.on("click", pointerMoveHandler);
-
             draw.on("drawstart", (e) => {
                 let feature = e.feature;
-                let coords = feature.getGeometry().getCoordinates()[0][0];
-                /*update x1 y1 with coordinates from where you start drawing*/
-                x1 = Math.round(coords[0]);
-                y1 = Math.round(coords[1]);
-                feature.setStyle(createStyle(feature));
-                feature.getStyle()[0].getText().setText("Area att exportera");
+                feature.setStyle(createStyle());
             });
 
-            /*wait for clickEvent function to update x2 y2 before rendering modal*/
-            draw.on("drawend", async(e) => {
-                await pointerMoveHandler
+            // drawend is the only relevant event for the rectangle coordinates for the modal
+            draw.on("drawend", (e) => {
+                pointerMoveHandler(e);
                 this.render()
             });
 
@@ -340,7 +356,6 @@ const Geouttag = function Geouttag(options = {}) {
 
         },
         onInit() {
-            measureStyleOptions = Measure;
             //A way of getting first property in an object
             for (initLayer in layers) break;
 

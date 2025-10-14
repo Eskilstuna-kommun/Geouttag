@@ -1,6 +1,5 @@
 const webpack = require('webpack');
-const merge = require('webpack-merge');
-const UglifyJSPlugin = require('uglifyjs-webpack-plugin');
+const  { merge } = require('webpack-merge');
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 const common = require('./webpack.common.js');
 
@@ -35,7 +34,7 @@ module.exports = merge(common, {
             options: {
               plugins: [
                 require('autoprefixer')({
-                  env: '> 0.5%, last 2 versions, Firefox ESR, not dead, not ie <= 10'
+                  env: '> 0.25%, not dead'
                 })
               ]
             }
@@ -48,14 +47,6 @@ module.exports = merge(common, {
     ]
   },
   plugins: [
-    new UglifyJSPlugin({
-      uglifyOptions: {
-        output: {
-          beautify: false
-        }
-      }
-    }),
-    new webpack.optimize.AggressiveMergingPlugin(),
     new MiniCssExtractPlugin({
       filename: "../css/export.css"    
     })    

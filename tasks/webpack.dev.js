@@ -1,13 +1,14 @@
-const merge = require('webpack-merge');
+const { merge } = require('webpack-merge');
 const common = require('./webpack.common.js');
 
 module.exports = merge(common, {
   output: {
-    path: `${__dirname}/../build/js`,
+    path: `${__dirname}/../../origo/plugins`,
     publicPath: '/build/js',
     filename: 'geouttag.js',
     libraryTarget: 'var',
-    libraryExport: 'default'
+    libraryExport: 'default',
+    library: 'Geouttag'
   },
   mode: 'development',
   module: {
@@ -29,7 +30,10 @@ module.exports = merge(common, {
     ]
   },  
   devServer: {
-    contentBase: './',
-    port: 9008
+    static: './',
+    port: 9008,
+    devMiddleware: {
+      writeToDisk: true
+    }
   }
 });

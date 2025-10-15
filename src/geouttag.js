@@ -1,9 +1,10 @@
 /* eslint-disable no-console */
-import Draw, { createBox } from 'ol/interaction/Draw';
-import VectorSource from 'ol/source/Vector';
-
-import { Style, Fill, Stroke, Text } from 'ol/style';
 import 'Origo';
+
+const Draw = Origo.ol.interaction.Draw;
+const createBox = Origo.ol.interaction.Draw.createBox;
+const VectorSource = Origo.ol.source.Vector;
+const { Style, Fill, Stroke, Text } = Origo.ol.style;
 
 /* Geouttag is a tool to request FME server to
      export data from a marked area in map */

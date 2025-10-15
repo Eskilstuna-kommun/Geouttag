@@ -10,19 +10,18 @@ const { Style, Fill, Stroke, Text } = Origo.ol.style;
      export data from a marked area in map */
 const Geouttag = function Geouttag(options = {}) {
   const {
-    target,
     url = '',
-    contactmail = '',
-    filepath = '',
-    infolink = '',
+    contactMail = '',
+    filePath = '',
+    infoLink = '',
     logo = '',
-    warninglimit,
-    warningtooltip = 'varning',
-    warningtext = 'varning',
-    errorlimit,
-    errortooltip = 'error',
-    errortext = 'error',
-    infotext = '',
+    warningLimit,
+    warningTooltip = 'varning',
+    warningText = 'varning',
+    errorLimit,
+    errorTooltip = 'error',
+    errorText = 'error',
+    infoText = '',
     layers = {}
   } = options;
 
@@ -88,10 +87,10 @@ const Geouttag = function Geouttag(options = {}) {
             <div>
                 <p style="font-family: Arial;max-width: 37em;">
                     <font size="2">
-                        ${infotext}
+                        ${infoText}
                         <br>
                         <br>
-                        <a href="${infolink}" target="_blank">
+                        <a href="${infoLink}" target="_blank">
                             <b>Klicka här för instruktion och mer information.</b>
                         </a>
                     </font>
@@ -99,11 +98,11 @@ const Geouttag = function Geouttag(options = {}) {
             </div>
             <div>
                 ${exportBtn.render()}
-                <span title="${errortooltip}" id="geouttag-red-warning" class="geouttag-red-warning">
-                    ${errortext}
+                <span title="${errorTooltip}" id="geouttag-red-warning" class="geouttag-red-warning">
+                    ${errorText}
                 </span>
-                <span title="${warningtooltip}" id="geouttag-yellow-warning" class="geouttag-yellow-warning">
-                    ${warningtext}
+                <span title="${warningTooltip}" id="geouttag-yellow-warning" class="geouttag-yellow-warning">
+                    ${warningText}
                     </span>
                 <img src="${logo}" align="right" style="width:auto;">
             </div>
@@ -112,13 +111,13 @@ const Geouttag = function Geouttag(options = {}) {
             <h3>Vi har tagit emot din beställning</h3>
             <br>
             <br>
-           Ditt geouttag kommer att levereras till din mail samt att du kan hämta den manuellt från ${filepath}
+           Ditt geouttag kommer att levereras till din mail samt att du kan hämta den manuellt från ${filePath}
             <br>
             <br>
             <font size="2">
                 <i>Tänk på att du bara får använda ditt geouttag inom ramen för ditt arbete. 
                     Du får inte sprida eller sälja informationen vidare, undantaget externa konsulter som utför arbete åt kommunen.
-                    Har du frågor, kontakta <a href="mailto:${contactmail}?Subject=Geouttag" target="_top">${contactmail}</a>
+                    Har du frågor, kontakta <a href="mailto:${contactMail}?Subject=Geouttag" target="_top">${contactMail}</a>
                 </i>
             </font>
             <br>
@@ -136,10 +135,10 @@ const Geouttag = function Geouttag(options = {}) {
     area = area < 0 ? -area : area;
 
     if (restrictedLayers.includes(selValue)) {
-      if (area > errorlimit) {
+      if (area > errorLimit) {
         document.getElementById('geouttag-red-warning').style.display = 'inline';
         document.getElementById(exportBtn.getId()).disabled = true;
-      } else if (area > warninglimit) {
+      } else if (area > warningLimit) {
         document.getElementById('geouttag-yellow-warning').style.display = 'inline';
       }
     } else {

@@ -33,24 +33,49 @@ The plugin can be loaded like this in an html-file:
         errorTooltip: "error text hover",
         errorText: "error text in modal",
         infoText: "Informative description for users",
-			layers: {
-			  background_layer_1: {
-			      title : "Layer One",
-			      filetypes: {
-              DXF : "fmescript.fmw",
-              SHP : "fmescript.fmw"
-			      }
-			  },
-			  background_layer_2: { 
-			      title : "Layer Two",
-			      filetypes: {
-              DXF : "fmescript.fmw",
-              SHP : "fmescript.fmw",
-				      GeoTIFF : "fmescript.fmw"
-			      },
-			      restricted: true
-			  }
-			}
+        layers: [
+          {
+            name: 'base',
+            title: 'Base map',
+            filetypes: [
+              {
+                title: 'DWG',
+                outputFormat: 'DWG', // 'outputFormat' is sent as a query param in the FME Flow request for the workspace to do with as it pleases
+                workspace: 'basemap.fmw'
+              },
+              {
+                title: 'Shape',
+                outputFormat: 'SHP',
+                workspace: 'basemap.fmw'
+              }
+            ]
+          },
+          {
+            name: 'cyclingmap',
+            title: 'Cycling map',
+            filetypes: [
+              {
+                title: 'DWG',
+                workspace: 'cycling_cad.fmw'
+              },
+              {
+                title: 'Shape',,
+                workspace: 'cycling_shape.fmw'
+              }
+            ],
+            restricted: true
+          },
+          {
+            name: 'hojddata_nh_grid',
+            title: 'National elevation data 2015',
+            filetypes: [
+              {
+                title: 'ESRI GRID',
+                workspace: 'grid_elev.fmw'
+              }
+            ]
+          }
+        ],
 		});
     viewer.addComponent(geouttag);
                 

@@ -22,7 +22,7 @@ const Geouttag = function Geouttag(options = {}) {
     errorTooltip = 'error',
     errorText = 'error',
     infoText = '',
-    layers = {}
+    layers = []
   } = options;
 
   let viewer;
@@ -150,20 +150,19 @@ const Geouttag = function Geouttag(options = {}) {
 
   /* Shows available filetype in dropdown for selected layer */
   function addFiletypes(selValue) {
-    const currFiletypes = layers[selValue].filetypes;
+    const currFiletypes = layers.find((layer) => layer.name === selValue.name).filetypes;
     let optionsHtml = '';
-    Object.keys(currFiletypes).forEach((filetype) => {
-      optionsHtml += `<option value="${filetype}">${filetype}</option>`;
+    currFiletypes.forEach((filetype) => {
+      optionsHtml += `<option value="${filetype.title}">${filetype.title}</option>`;
     });
-
     document.getElementById(fileTypeSelect.getId()).innerHTML = optionsHtml;
   }
 
   /* Get available layers to select in dropdown */
   function getOptions() {
     let html = '';
-    Object.keys(layers).forEach((layer) => {
-      html += `<option value="${layer}">${layers[layer].title}</option>`;
+    layers.forEach((layer) => {
+      html += `<option value="${layer.name}">${layer.title}</option>`;
     });
     return html;
   }
@@ -216,20 +215,27 @@ const Geouttag = function Geouttag(options = {}) {
 
     setCookie('email', emailElem.value, 365);
 
-    /* Get the approtiate FMEscript name based on selected layers and filetype */
-    const layerType = document.getElementById(layerTypeSelect.getId()).value;
-    const fileType = document.getElementById(fileTypeSelect.getId()).value;
-    const FMEscript = layers[layerType].filetypes[fileType];
+    /* Get the FME workspace name, title of the export option and title of filetype
+      from the layers array via the selected options */
+    const selectedExportName = document.getElementById(layerTypeSelect.getId()).value;
+    const selectedExport = layers.find((layer) => layer.name === selectedExportName);
+
+    const fileTypeName = document.getElementById(fileTypeSelect.getId()).value;
+    const fileTypeObj = selectedExport.filetypes.find((filetype) => fileTypeName === filetype.title);
+
+    const FMEscript = fileTypeObj.workspace;
+    const fileType = fileTypeObj.outputFormat;
+    const layerType = selectedExport.name;
 
     const d = new Date();
     let requestUrl = `${url}/${FMEscript}?geom=POLYGON `;
     requestUrl += `((${x1Elem.value} ${y1Elem.value},${x1Elem.value} ${y2Elem.value},${x2Elem.value} ${y2Elem.value},${x2Elem.value} ${y1Elem.value}))`;
     requestUrl
-                += `&srs=EPSG:3010&productName=${layerType}`
-                + `&email=${emailElem.value}`
-                + `&id=${d.getTime()}`
-                + `&outputFormat=${fileType}`
-                + '&opt_servicemode=async';
+      += `&srs=EPSG:3010&productName=${layerType}`
+      + `&email=${emailElem.value}`
+      + `&id=${d.getTime()}`
+      + `${fileType ? `&outputFormat=${fileType}` : ''}` // if there's an outputFormat prop of the fileType then relay it to FME Flow
+      + '&opt_servicemode=async';
 
     document.getElementById('ModalForm').style.display = 'none';
     document.getElementById('ModalStatus').style.display = 'block';
@@ -351,12 +357,10 @@ const Geouttag = function Geouttag(options = {}) {
       this.addComponents([closeBtn, exportBtn, layerTypeSelect, fileTypeSelect]);
     },
     onInit() {
-      // A way of getting first property in an object
-      initLayer = Object.keys(layers)[0];
-
+      initLayer = layers[0];
       restrictedLayers = [];
-      Object.keys(layers).forEach((layer) => {
-        if (layers[layer].restricted) {
+      layers.forEach((layer) => {
+        if (layer.restricted) {
           restrictedLayers.push(layer);
         }
       });
@@ -370,12 +374,14 @@ const Geouttag = function Geouttag(options = {}) {
       });
 
       document.getElementById('email').value = (getCookie('email'));
-      document.getElementById(layerTypeSelect.getId()).addEventListener('change', (e) => {
-        addFiletypes(e.target.value);
-        restrictExport(e.target.value);
+      const layerTypeSelectElement = document.getElementById(layerTypeSelect.getId());
+      layerTypeSelectElement.addEventListener('change', () => {
+        const selectedLayer = layers.find((layer) => layer.name === layerTypeSelectElement.value);
+        addFiletypes(selectedLayer);
+        restrictExport(selectedLayer);
       });
-      addFiletypes(initLayer);
 
+      addFiletypes(initLayer);
       this.dispatch('render');
     }
   });

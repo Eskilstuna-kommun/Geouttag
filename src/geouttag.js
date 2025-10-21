@@ -22,7 +22,9 @@ const Geouttag = function Geouttag(options = {}) {
     errorTooltip = 'error',
     errorText = 'error',
     infoText = '',
-    layers = []
+    predefinedExports = [],
+    maplayerExport = {}
+
   } = options;
 
   let viewer;
@@ -36,8 +38,9 @@ const Geouttag = function Geouttag(options = {}) {
   let exportBtn;
   let layerTypeSelect;
   let fileTypeSelect;
-  let initLayer;
-  let restrictedLayers;
+  let mapExports;
+  let allExports;
+  const restrictedLayers = [];
 
   /* returns html string of modal content */
   function modalContent(xMin, yMin, xMax, yMax) {
@@ -150,7 +153,7 @@ const Geouttag = function Geouttag(options = {}) {
 
   /* Shows available filetype in dropdown for selected layer */
   function addFiletypes(selValue) {
-    const currFiletypes = layers.find((layer) => layer.name === selValue.name).filetypes;
+    const currFiletypes = allExports.find((layer) => layer.name === selValue.name).filetypes;
     let optionsHtml = '';
     currFiletypes.forEach((filetype) => {
       optionsHtml += `<option value="${filetype.title}">${filetype.title}</option>`;
@@ -159,9 +162,20 @@ const Geouttag = function Geouttag(options = {}) {
   }
 
   /* Get available layers to select in dropdown */
-  function getOptions() {
+  function getOptions({ mapLayers, predefined }) {
+    if (mapLayers) {
+      mapExports = mapLayers.map((layer) => ({
+        name: layer.get('name'),
+        title: layer.get('title'),
+        sourceUrl: layer.get('source').urls[0],
+        filetypes: maplayerExport.filetypes
+      }));
+
+      allExports = predefined.concat(mapExports);
+    } else allExports = predefined;
+
     let html = '';
-    layers.forEach((layer) => {
+    allExports.forEach((layer) => {
       html += `<option value="${layer.name}">${layer.title}</option>`;
     });
     return html;
@@ -218,12 +232,12 @@ const Geouttag = function Geouttag(options = {}) {
     /* Get the FME workspace name, title of the export option and title of filetype
       from the layers array via the selected options */
     const selectedExportName = document.getElementById(layerTypeSelect.getId()).value;
-    const selectedExport = layers.find((layer) => layer.name === selectedExportName);
+    const selectedExport = allExports.find((layer) => layer.name === selectedExportName);
 
     const fileTypeName = document.getElementById(fileTypeSelect.getId()).value;
     const fileTypeObj = selectedExport.filetypes.find((filetype) => fileTypeName === filetype.title);
 
-    const FMEscript = fileTypeObj.workspace;
+    const FMEscript = fileTypeObj.workspace || maplayerExport.workspace;
     const fileType = fileTypeObj.outputFormat;
     const layerType = selectedExport.name;
 
@@ -347,7 +361,10 @@ const Geouttag = function Geouttag(options = {}) {
 
       layerTypeSelect = Origo.ui.Element({
         tagName: 'select',
-        innerHTML: `${getOptions()}`
+        innerHTML: `${getOptions({
+          mapLayers: Object.keys(maplayerExport).length ? viewer.getLayers().filter((layer) => layer.get('geouttag')) : [],
+          predefined: predefinedExports || null
+        })}`
       });
 
       fileTypeSelect = Origo.ui.Element({
@@ -357,13 +374,13 @@ const Geouttag = function Geouttag(options = {}) {
       this.addComponents([closeBtn, exportBtn, layerTypeSelect, fileTypeSelect]);
     },
     onInit() {
-      initLayer = layers[0];
-      restrictedLayers = [];
-      layers.forEach((layer) => {
-        if (layer.restricted) {
-          restrictedLayers.push(layer);
-        }
-      });
+      if (predefinedExports) {
+        predefinedExports.forEach((layer) => {
+          if (layer.restricted) {
+            restrictedLayers.push(layer);
+          }
+        });
+      }
     },
     render() {
       modal = Origo.ui.Modal({
@@ -376,13 +393,14 @@ const Geouttag = function Geouttag(options = {}) {
       document.getElementById('email').value = (getCookie('email'));
       const layerTypeSelectElement = document.getElementById(layerTypeSelect.getId());
       layerTypeSelectElement.addEventListener('change', () => {
-        const selectedLayer = layers.find((layer) => layer.name === layerTypeSelectElement.value);
+        const selectedLayer = allExports.find((layer) => layer.name === layerTypeSelectElement.value);
         addFiletypes(selectedLayer);
         restrictExport(selectedLayer);
       });
-
-      addFiletypes(initLayer);
-      this.dispatch('render');
+      if (allExports.length) {
+        addFiletypes(allExports[0]);
+        this.dispatch('render');
+      } else console.warn('No exports defined, check your configuration.');
     }
   });
 };

@@ -6,6 +6,9 @@ Geouttag plugin for Origo using FME server Web Services. The user may draw a rec
 Geouttag is only used without any other plugins so the functionality can not be guaranteed if such use.
 (It autostarts and claims the mouse cursor and cannot be turned off)
 
+Layers in the map meant to be exportable via this plugin can be indicated via a `geouttag: true` prop.
+These layers share a configuration, including export formats, possible via wfs, as well as an FME Flow workspace.
+
 #### Example usage of Geouttag as plugin
 The plugin can be loaded like this in an html-file:
 ```html
@@ -33,7 +36,7 @@ The plugin can be loaded like this in an html-file:
         errorTooltip: "error text hover",
         errorText: "error text in modal",
         infoText: "Informative description for users",
-        layers: [
+        predefinedExports: [
           {
             name: 'base',
             title: 'Base map',
@@ -76,6 +79,28 @@ The plugin can be loaded like this in an html-file:
             ]
           }
         ],
+        maplayerExport: {
+        filetypes: [
+          {
+            title: 'GML3',
+            outputFormat: 'GML3'
+          },
+          {
+            title: 'GeoJSON',
+            outputFormat: 'application/json'
+          },
+          {
+            title: 'dxf',
+            outputFormat: 'dxf'
+          },
+          {
+            title: 'GeoPackage',
+            outputFormat: 'geopkg'
+
+          }
+        ],
+        workspace: 'maplayers_wfs.fmw'
+      } 
 		});
     viewer.addComponent(geouttag);
                 

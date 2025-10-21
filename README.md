@@ -33,7 +33,7 @@ The plugin can be loaded like this in an html-file:
         errorTooltip: "error text hover",
         errorText: "error text in modal",
         infoText: "Informative description for users",
-        layers: [
+        predefinedExports: [
           {
             name: 'base',
             title: 'Base map',
@@ -76,6 +76,28 @@ The plugin can be loaded like this in an html-file:
             ]
           }
         ],
+        maplayerExport: {
+        filetypes: [
+          {
+            title: 'GML3',
+            outputFormat: 'GML3'
+          },
+          {
+            title: 'GeoJSON',
+            outputFormat: 'application/json'
+          },
+          {
+            title: 'dxf',
+            outputFormat: 'dxf'
+          },
+          {
+            title: 'GeoPackage',
+            outputFormat: 'geopkg'
+
+          }
+        ],
+        workspace: 'maplayers_wfs.fmw'
+      } 
 		});
     viewer.addComponent(geouttag);
                 

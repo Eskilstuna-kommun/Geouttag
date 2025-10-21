@@ -6,6 +6,9 @@ Geouttag plugin for Origo using FME server Web Services. The user may draw a rec
 Geouttag is only used without any other plugins so the functionality can not be guaranteed if such use.
 (It autostarts and claims the mouse cursor and cannot be turned off)
 
+Layers in the map meant to be exportable via this plugin can be indicated via a `geouttag: true` prop.
+These layers share a configuration, including export formats, possible via wfs, as well as an FME Flow workspace.
+
 #### Example usage of Geouttag as plugin
 The plugin can be loaded like this in an html-file:
 ```html

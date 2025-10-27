@@ -28,18 +28,18 @@ const Geouttag = function Geouttag(options = {}) {
   } = options;
 
   let viewer;
-  let modal;
   let measureStyleOptions;
   let map;
   let projectionCode;
-  let draw;
+  let geouttag;
   let x1; let y1; let x2; let y2;
-  let closeBtn;
   let exportBtn;
   let layerTypeSelect;
   let fileTypeSelect;
   let mapExports;
   let allExports;
+  let isActive = false;
+  let geouttagButton;
   const restrictedLayers = [];
 
   /* returns html string of modal content */
@@ -126,7 +126,7 @@ const Geouttag = function Geouttag(options = {}) {
             <br>
             <br>
             <br>
-            ${closeBtn.render()}
+
         </div>`;
 
     return modalhtml;
@@ -320,43 +320,95 @@ const Geouttag = function Geouttag(options = {}) {
     });
   }
 
+  function toggleGeouttag() {
+    const detail = {
+      name: 'geouttag',
+      active: !isActive
+    };
+    viewer.dispatch('toggleClickInteraction', detail);
+  }
+
+  function setActive(state) {
+    isActive = state;
+  }
+
+  function enableInteraction() {
+    map.addInteraction(geouttag);
+    document.getElementById(geouttagButton.getId()).classList.add('active');
+    document.getElementById(geouttagButton.getId()).classList.remove('tooltip');
+    setActive(true);
+  }
+
+  function disableInteraction() {
+    map.removeInteraction(geouttag);
+    document.getElementById(geouttagButton.getId()).classList.remove('active');
+    document.getElementById(geouttagButton.getId()).classList.add('tooltip');
+    setActive(false);
+  }
+
   return Origo.ui.Component({
     name: 'geouttag',
     onAdd(evt) {
       viewer = evt.target;
       map = viewer.getMap();
       projectionCode = map.getView().getProjection();
+      geouttag = makeDrawInteraction();
 
-      draw = makeDrawInteraction();
-
-      draw.on('drawstart', (e) => {
+      geouttag.on('drawstart', (e) => {
         const feature = e.feature;
         feature.setStyle(createStyle());
       });
 
       // drawend is the only relevant event for the rectangle coordinates for the modal
-      draw.on('drawend', (e) => {
+      geouttag.on('drawend', (e) => {
         pointerMoveHandler(e);
-        this.render();
-      });
+        console.log(`this would be the modalContent: ${modalContent(x1, y1, x2, y2)}`);
 
-      map.addInteraction(draw);
-
-      closeBtn = Origo.ui.Button({
-        click() {
-          modal.closeModal();
-        },
-        text: 'Stäng Fönster',
-        cls: 'geouttag-close'
-      });
-
-      exportBtn = Origo.ui.Button({
-        click() {
+        Origo.ui.Modal({
+          title: 'Välj det lager du vill exportera från vald area',
+          content: `${modalContent(x1, y1, x2, y2)}`,
+          target: viewer.getMain().getId(),
+          cls: 'geouttag-modal'
+        });
+        document.getElementById('email').value = (getCookie('email'));
+        const layerTypeSelectElement = document.getElementById(layerTypeSelect.getId());
+        layerTypeSelectElement.addEventListener('change', () => {
+          const selectedLayer = allExports.find((layer) => layer.name === layerTypeSelectElement.value);
+          addFiletypes(selectedLayer);
+          restrictExport(selectedLayer);
+        });
+        if (allExports.length) {
+          addFiletypes(allExports[0]);
+        } else console.warn('No exports defined, check your configuration.');
+        const exportBtnElement = document.getElementById(exportBtn.getId());
+        exportBtnElement.addEventListener('click', () => {
           sendData();
+        });
+      });
+
+      viewer.on('toggleClickInteraction', (detail) => {
+        if (detail.name === 'geouttag' && detail.active) {
+          enableInteraction();
+        } else {
+          disableInteraction();
+        }
+      });
+
+      geouttagButton = Origo.ui.Button({
+        cls: 'padding-small margin-bottom-smaller icon-smaller round light box-shadow tooltip',
+        click() {
+          toggleGeouttag();
         },
-        text: 'Starta Export',
-        style: 'margin-top: 1.3rem',
-        cls: 'export-btn'
+        icon: '#ic_download_24px',
+        tooltipText: 'Geouttag',
+        tooltipPlacement: 'east'
+      });
+
+      exportBtn = Origo.ui.Element({
+        tagName: 'button',
+        cls: 'export-btn light box-shadow',
+        style: 'margin-top: 1.3rem;',
+        innerHTML: 'Starta export'
       });
 
       layerTypeSelect = Origo.ui.Element({
@@ -371,7 +423,8 @@ const Geouttag = function Geouttag(options = {}) {
         tagName: 'select'
       });
 
-      this.addComponents([closeBtn, exportBtn, layerTypeSelect, fileTypeSelect]);
+      this.addComponents([geouttagButton]);
+      this.render();
     },
     onInit() {
       if (predefinedExports) {
@@ -383,24 +436,18 @@ const Geouttag = function Geouttag(options = {}) {
       }
     },
     render() {
-      modal = Origo.ui.Modal({
-        title: 'Välj det lager du vill exportera från vald area',
-        content: `${modalContent(x1, y1, x2, y2)}`,
-        target: viewer.getMain().getId(),
-        cls: 'geouttag-modal'
+      const filterDiv = Origo.ui.Element({
+        tagName: 'div',
+        cls: 'flex column',
+        style: {
+          position: 'relative'
+        }
       });
 
-      document.getElementById('email').value = (getCookie('email'));
-      const layerTypeSelectElement = document.getElementById(layerTypeSelect.getId());
-      layerTypeSelectElement.addEventListener('change', () => {
-        const selectedLayer = allExports.find((layer) => layer.name === layerTypeSelectElement.value);
-        addFiletypes(selectedLayer);
-        restrictExport(selectedLayer);
-      });
-      if (allExports.length) {
-        addFiletypes(allExports[0]);
-        this.dispatch('render');
-      } else console.warn('No exports defined, check your configuration.');
+      document.getElementById(viewer.getMain().getMapTools().getId()).appendChild(Origo.ui.dom.html(filterDiv.render()));
+      document.getElementById(filterDiv.getId()).appendChild(Origo.ui.dom.html(geouttagButton.render()));
+
+      this.dispatch('render');
     }
   });
 };

@@ -4,7 +4,7 @@ const common = require('./webpack.common.js');
 
 module.exports = merge(common, {
   output: {
-    path: `${__dirname}/../../Ek-extern-2023/plugins/geouttag`,
+    path: `${__dirname}/../../origo/plugins/geouttag`,
     publicPath: '/build/js',
     filename: 'geouttag.js',
     libraryTarget: 'var',

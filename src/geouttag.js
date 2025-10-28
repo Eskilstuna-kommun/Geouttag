@@ -1,5 +1,6 @@
 /* eslint-disable no-console */
 import 'Origo';
+import loadSVGs from './loadresources';
 
 const Draw = Origo.ol.interaction.Draw;
 const createBox = Origo.ol.interaction.Draw.createBox;
@@ -41,6 +42,8 @@ const Geouttag = function Geouttag(options = {}) {
   let isActive = false;
   let geouttagButton;
   const restrictedLayers = [];
+
+  loadSVGs();
 
   /* returns html string of modal content */
   function modalContent(xMin, yMin, xMax, yMax) {
@@ -399,7 +402,7 @@ const Geouttag = function Geouttag(options = {}) {
         click() {
           toggleGeouttag();
         },
-        icon: '#ic_download_24px',
+        icon: '#geouttag_ic_download_24px',
         tooltipText: 'Geouttag',
         tooltipPlacement: 'east'
       });

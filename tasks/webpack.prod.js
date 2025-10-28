@@ -1,6 +1,7 @@
 const { merge } = require('webpack-merge');
 const autoprefixer = require('autoprefixer');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
+const CopyPlugin = require('copy-webpack-plugin');
 const common = require('./webpack.common.js');
 
 module.exports = merge(common, {
@@ -49,6 +50,11 @@ module.exports = merge(common, {
   plugins: [
     new MiniCssExtractPlugin({
       filename: '../css/export.css'
+    }),
+    new CopyPlugin({
+      patterns: [
+        { from: 'resources/svg/material-icons.svg', to: '../svg/material-icons.svg' }
+      ]
     })
   ]
 });

@@ -47,6 +47,20 @@
     font-size: 1rem;
 }
 
+.control-container {
+  background-color: white;
+  border-radius: 5px;
+  box-shadow: 0 0 8px #888;
+  font-size: 12px;
+  font-weight: normal;
+  position: absolute;
+  left: 100px;
+  top: 80px;
+  max-width: 300px;
+  z-index: 1;
+  opacity: 1;
+}
+
     /*.geouttag-close:hover,
     .geouttag-close:focus {
         color: black;

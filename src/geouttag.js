@@ -41,6 +41,8 @@ const Geouttag = function Geouttag(options = {}) {
   let allExports;
   let isActive = false;
   let geouttagButton;
+  let controlContainer;
+  let valueText;
   const restrictedLayers = [];
 
   loadSVGs();
@@ -170,7 +172,7 @@ const Geouttag = function Geouttag(options = {}) {
       mapExports = mapLayers.map((layer) => ({
         name: layer.get('name'),
         title: layer.get('title'),
-        sourceUrl: layer.get('source').urls[0],
+        sourceUrl: layer.get('source')?.urls?.[0] ?? '', // it may be interesting to have the layer's source though the layer name might be enough (depending on the receiver)
         filetypes: maplayerExport.filetypes
       }));
 
@@ -324,6 +326,22 @@ const Geouttag = function Geouttag(options = {}) {
   }
 
   function toggleGeouttag() {
+    // create control panel element if it does not exist in the dom and if it does remove it
+    // alternatively remove hidden css prop if it has it, add if not
+    if (document.getElementById(controlContainer.getId())) {
+      document.getElementById(controlContainer.getId()).remove();
+    } else {
+      document.getElementById(viewer.getMain().getId()).append(Origo.ui.dom.html(controlContainer.render()));
+      // get id of fileTypeSelect
+      const layerTypeSelectElement = document.getElementById(layerTypeSelect.getId());
+      console.log('layerTypeSelectElement', layerTypeSelectElement);
+      layerTypeSelectElement.addEventListener('change', () => {
+        const selectedLayer = allExports.find((layer) => layer.name === layerTypeSelectElement.value);
+        addFiletypes(selectedLayer);
+        //restrictExport(selectedLayer);
+      });
+    }
+
     const detail = {
       name: 'geouttag',
       active: !isActive
@@ -410,7 +428,7 @@ const Geouttag = function Geouttag(options = {}) {
       exportBtn = Origo.ui.Element({
         tagName: 'button',
         cls: 'export-btn light box-shadow',
-        style: 'margin-top: 1.3rem;',
+        style: 'margin-top: 1.3rem; width: 30%',
         innerHTML: 'Starta export'
       });
 
@@ -426,6 +444,72 @@ const Geouttag = function Geouttag(options = {}) {
         tagName: 'select'
       });
 
+      const headerComp = Origo.ui.Element({
+        tagName: 'h3',
+        innerHTML: 'Geouttag',
+        style: 'text-align: center;'
+      });
+
+      const productSelectorTextComp = Origo.ui.Element({
+        tagName: 'p',
+        innerHTML: 'Välj en produkt eller ett till flera lager i kartan',
+        cls: 'text-smaller'
+      });
+
+      const formatSelectorTextComp = Origo.ui.Element({
+        tagName: 'p',
+        innerHTML: 'Välj ett exportformat',
+        cls: 'text-smaller'
+      });
+
+      const drawToolSelectorTextComp = Origo.ui.Element({
+        tagName: 'p',
+        innerHTML: 'Välj ett verktyg för att rita önskat område att exportera',
+        cls: 'text-smaller',
+        style: 'padding-bottom: 0.4rem;'
+      });
+
+      const polygonButton = Origo.ui.Button({
+        cls: 'light text-smaller padding-left-large',
+        style: 'flex: 1 1 auto;',
+        text: 'polygon'
+      });
+
+      const squareButton = Origo.ui.Button({
+        cls: 'light text-smaller',
+        style: 'flex: 1 1 auto;',
+        text: 'kvadrat'
+      });
+
+      const rectangleButton = Origo.ui.Button({
+        cls: 'light text-smaller padding-right-large',
+        style: 'flex: 1 1 auto;',
+        text: 'rektangel'
+      });
+
+      const drawToolbarComp = Origo.ui.Element({
+        cls: 'flex button-group divider-horizontal rounded-large bg-inverted box-shadow',
+        style: 'width: 75%;',
+        components: [polygonButton, squareButton, rectangleButton]
+      });
+
+      // synopsis: välj en produkt eller ett till flera kartlager
+      // därefter utformat
+      // följt av geometrityp för områdesdefinition
+      // när sådan väljs så kanske geometrisk form bör dyka upp som kan ändras
+      controlContainer = Origo.ui.Element({
+        tagName: 'div',
+        cls: 'flex column control box bg-white overflow-hidden',
+        style: {
+          left: '4rem',
+          top: '1rem',
+          padding: '0.5rem',
+          width: '25rem',
+          'z-index': '-1'
+        },
+        components: [headerComp, productSelectorTextComp, layerTypeSelect, formatSelectorTextComp, fileTypeSelect, drawToolSelectorTextComp, drawToolbarComp, exportBtn]
+      });
+
       this.addComponents([geouttagButton]);
       this.render();
     },
@@ -439,17 +523,7 @@ const Geouttag = function Geouttag(options = {}) {
       }
     },
     render() {
-      const filterDiv = Origo.ui.Element({
-        tagName: 'div',
-        cls: 'flex column',
-        style: {
-          position: 'relative'
-        }
-      });
-
-      document.getElementById(viewer.getMain().getMapTools().getId()).appendChild(Origo.ui.dom.html(filterDiv.render()));
-      document.getElementById(filterDiv.getId()).appendChild(Origo.ui.dom.html(geouttagButton.render()));
-
+      document.getElementById(viewer.getMain().getMapTools().getId()).append(Origo.ui.dom.html(geouttagButton.render())); // den enda komponenten som ska synas från start
       this.dispatch('render');
     }
   });

@@ -9,6 +9,7 @@
 .export-btn{
     background: #dbdbdb;
     margin-top: 1.3rem;
+    border-radius: 16px;
 }
 
 .export-btn:disabled{
@@ -67,3 +68,81 @@
         text-decoration: none;
         cursor: pointer;
     }*/
+.custom-select {
+  position: relative;
+  width: max;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 5px;
+}
+
+.selected-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 5px;
+}
+
+.selected-tag {
+  background: #e0e0e0;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+}
+
+.selected-tag::after {
+  content: "×";
+  margin-left: 5px;
+  cursor: pointer;
+}
+
+.select-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  padding: 5px;
+  cursor: pointer;
+}
+
+/* Ensure placeholder and input text are rendered in black like native selects */
+.select-input::placeholder {
+  color: #000; /* Black by default */
+  opacity: 1; /* Ensure full opacity */
+}
+
+.select-input.disabled::placeholder {
+  color: #c0b8b8; /* Gray when input loses focus */
+}
+
+
+
+
+
+.options-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: white;
+  z-index: 1000;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.option {
+  padding: 8px;
+  cursor: pointer;
+}
+
+.option:hover {
+  background: #f0f0f0;
+}
+
+.option.selected {
+  background: #007bff;
+  color: white;
+}

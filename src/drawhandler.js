@@ -1,41 +1,28 @@
 /* eslint-disable no-console */
-import Origo from 'Origo';
-
-const DoubleClickZoom = Origo.ol.interaction.DoubleClickZoom;
-const { Style, Fill, Stroke, Text } = Origo.ol.style;
-const { Select, Modify } = Origo.ol.interaction;
 
 const GeouttagDrawHandler = function GeouttagDrawHandler(options = {}) {
   const {
     stylewindow,
-    pointerMoveHandler
+    pointerMoveHandler,
+    Origo,
+    warningLimit,
+    errorLimit,
+    updateExportButtonState,
+    styleFunction
   } = options;
+
+  const DoubleClickZoom = Origo.ol.interaction.DoubleClickZoom;
+ 
+  const { Select, Modify, Translate } = Origo.ol.interaction;
 
   let geouttagLayer;
   let geouttag;
   let map;
   let select;
   let modify;
+  let translate;
 
   // default style for the rectangle
-  function createStyle() {
-    return new Style({
-      fill: new Fill({
-        color: 'rgba(255, 255, 255, 0.4)'
-      }),
-      stroke: new Stroke({
-        color: 'rgba(0,153,255,1)',
-        width: 2
-      }),
-      text: new Text({
-        text: 'Area att exportera',
-        font: '14px Calibri,sans-serif',
-        fill: new Fill({ color: '#000' }),
-        stroke: new Stroke({ color: '#fff', width: 3 }),
-        offsetY: -10
-      })
-    });
-  }
 
   function setGeouttagInteraction(interaction) {
     geouttag = interaction;
@@ -73,11 +60,58 @@ const GeouttagDrawHandler = function GeouttagDrawHandler(options = {}) {
   }
 
   function onDrawStart(evt) {
+    //const feature = evt.feature;
     const feature = evt.feature;
-    feature.setStyle(createStyle());
 
-    if (evt.feature.getGeometry().getType() !== 'Point') {
+    if (feature.getGeometry().getType() !== 'Point') {
       disableDoubleClickZoom(evt);
+    }
+
+    // attach geometry change listener to force redraw so overlay segments/vertices update immediately
+    try {
+      const geom = feature.getGeometry();
+      if (geom && typeof geom.on === 'function') {
+        // cleanup any existing listener
+        const prev = feature.get('_geomChangeKey');
+        if (prev) Origo.ol.Observable.unByKey(prev);
+        const key = geom.on('change', () => {
+          try {
+            if (map && typeof map.render === 'function') map.render();
+            if (typeof updateExportButtonState === 'function') updateExportButtonState();
+            // also try to refresh draw overlay/sketch features so segment/vertex styles update
+            try {
+              let overlay = null;
+              if (geouttag) {
+                if (typeof geouttag.getOverlay === 'function') overlay = geouttag.getOverlay();
+                else if (geouttag.overlay_) overlay = geouttag.overlay_;
+              }
+              if (overlay && typeof overlay.getSource === 'function') {
+                const ofs = overlay.getSource().getFeatures();
+                if (ofs && ofs.length) ofs.forEach(of => { try { of.changed(); } catch (e) {} });
+              }
+
+              // fallback: try internal sketch properties on Draw interaction
+              if (geouttag) {
+                ['sketchFeature_', 'sketchPoint_', 'sketchLine_','sketchLineString_'].forEach((key) => {
+                  try {
+                    const obj = geouttag[key];
+                    if (obj && typeof obj.changed === 'function') obj.changed();
+                  } catch (e) {
+                    // ignore
+                  }
+                });
+              }
+            } catch (e) {
+              // ignore overlay refresh errors
+            }
+          } catch (e) {
+            // ignore
+          }
+        });
+        feature.set('_geomChangeKey', key);
+      }
+    } catch (err) {
+      console.warn('Could not attach geom change listener on drawstart:', err);
     }
   }
 
@@ -103,8 +137,12 @@ const GeouttagDrawHandler = function GeouttagDrawHandler(options = {}) {
     if (e.target && e.target.getLength() > 0) {
       const feature = e.target.item(0);
 
-      const selectedStyle = createStyle();
-      feature.setStyle(selectedStyle);
+      // Selected features use the layer/select styleFunction; trigger a redraw
+      try {
+        if (typeof feature.changed === 'function') feature.changed();
+      } catch (err) {
+        console.warn('Could not refresh selected feature style:', err);
+      }
     }
   }
 
@@ -119,6 +157,17 @@ const GeouttagDrawHandler = function GeouttagDrawHandler(options = {}) {
       } else {
         console.warn('pointerMoveHandler not available - coordinates not updated');
       }
+      // Re-evaluate style based on updated geometry
+      try {
+        if (typeof feature.changed === 'function') feature.changed();
+      } catch (err) {
+        console.warn('Could not refresh feature style after modify:', err);
+      }
+      try {
+        if (typeof updateExportButtonState === 'function') updateExportButtonState();
+      } catch (err) {
+        console.warn('Could not call updateExportButtonState after modify:', err);
+      }
       console.log('Feature modified, coordinates updated');
     }
   }
@@ -126,17 +175,19 @@ const GeouttagDrawHandler = function GeouttagDrawHandler(options = {}) {
   function onDrawEnd(evt) {
     const feature = evt.feature;
 
-    enableDoubleClickZoom();
+
+    //enableDoubleClickZoom();
 
     if (stylewindow && stylewindow.getStyleObject) {
       const styleObject = stylewindow.getStyleObject(feature);
       feature.set('origostyle', styleObject);
     }
 
-    if (!select) {
+      if (!select) {
+      console.log('creating a new select')
       select = new Select({
         layers: [geouttagLayer],
-        style: null,
+        style: styleFunction,
         hitTolerance: 5
       });
       map.addInteraction(select);
@@ -144,17 +195,30 @@ const GeouttagDrawHandler = function GeouttagDrawHandler(options = {}) {
       select.getFeatures().on('add', onSelectAdd);
     }
 
-    if (!modify) {
-      modify = new Modify({
-        features: select.getFeatures()
-      });
-      map.addInteraction(modify);
-      modify.on('modifyend', onModifyEnd);
-    }
+    const translateInteraction = new Translate({
+      layers: [geouttagLayer]
+    });
+    map.addInteraction(translateInteraction);
+
+    console.log('creating a new modify')
+    modify = new Modify({
+      features: select.getFeatures()
+    });
+    map.addInteraction(modify);
+    modify.on('modifyend', onModifyEnd);
 
     if (select) {
       select.getFeatures().clear();
       select.getFeatures().push(feature);
+    }
+
+    // cleanup geom change listener attached during draw
+    try {
+      const key = feature.get('_geomChangeKey');
+      if (key) Origo.ol.Observable.unByKey(key);
+      feature.unset('_geomChangeKey');
+    } catch (err) {
+      // ignore
     }
 
     // Deactivate drawing after completion
@@ -179,7 +243,6 @@ const GeouttagDrawHandler = function GeouttagDrawHandler(options = {}) {
     setGeouttagInteraction,
     setGeouttagLayer,
     initializeMap,
-    createStyle,
     disableDoubleClickZoom,
     onDrawStart,
     addDoubleClickZoomInteraction,

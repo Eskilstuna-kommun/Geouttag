@@ -2,10 +2,11 @@
 import 'Origo';
 import loadSVGs from './loadresources';
 import GeouttagDrawHandler from './drawhandler';
+import styles from './styles';
 
 const Draw = Origo.ol.interaction.Draw;
 const createBox = Origo.ol.interaction.Draw.createBox;
-const createRegularPolygon = Origo.ol.interaction.Draw.createBox;
+const createRegularPolygon = Origo.ol.interaction.Draw.createRegularPolygon;
 const VectorSource = Origo.ol.source.Vector;
 const VectorLayer = Origo.ol.layer.Vector;
 const { Style, Fill, Stroke, Text } = Origo.ol.style;
@@ -72,6 +73,7 @@ const Geouttag = function Geouttag(options = {}) {
 
   /* State for the export button, if it should be enabled or disabled */
   function updateExportButtonState() {
+    console.log('this is updateExportButtonState')
     const exportBtnElement = document.getElementById(exportBtn.getId());
     const productSelectElement = document.getElementById(productSelect.getId());
     const fileTypeSelectElement = document.getElementById(fileTypeSelect.getId());
@@ -81,8 +83,12 @@ const Geouttag = function Geouttag(options = {}) {
     const hasFileTypeSelection = !fileTypeSelectElement.disabled
       && fileTypeSelectElement.options.length > 0
       && !!fileTypeSelectElement.value;
+    console.log('this is feature 0 of the geouttagLayer source')
+    console.log(geouttagLayer.getSource().getFeatures()[0]?.getGeometry().getArea())
+    const hasOkArea = geouttagLayer.getSource().getFeatures()[0]?.getGeometry().getArea() < warningLimit;
+    console.log(`hasProductSelection ${hasProductSelection}, hasMapLayerSelection ${hasMapLayerSelection}, hasFileTypeSelection ${hasFileTypeSelection}, hasDefinedArea ${hasOkArea}`);
 
-    const exportReady = (hasProductSelection || hasMapLayerSelection) && hasFileTypeSelection;
+    const exportReady = (hasProductSelection || hasMapLayerSelection) && hasFileTypeSelection && hasOkArea;
     exportBtnElement.disabled = !exportReady;
   }
 
@@ -102,7 +108,7 @@ const Geouttag = function Geouttag(options = {}) {
     filetypeSelectElement.innerHTML = optionsHtml;
     if ((filetypeSelectElement.options.length > 0) && (filetypeSelectElement.disabled)) filetypeSelectElement.disabled = false;
     else if ((filetypeSelectElement.options.length === 0) && (filetypeSelectElement.disabled === false)) filetypeSelectElement.disabled = true;
-    updateExportButtonState();
+    //updateExportButtonState();
   }
 
   function getMaplayerOptions({ mapLayers, predefined }) {
@@ -360,27 +366,108 @@ const Geouttag = function Geouttag(options = {}) {
     editingInitialized = true;
   }
 
+  function styleFunction(feature) {
+    try {
+      if (!feature || !feature.getGeometry) {
+        const base = styles.defaultStyle();
+        return [new Style({ fill: base.getFill ? base.getFill() : undefined, stroke: base.getStroke ? base.getStroke() : undefined })];
+      }
+
+      const geom = feature.getGeometry();
+      if (!geom) {
+        const base = styles.defaultStyle();
+        return [new Style({ fill: base.getFill ? base.getFill() : undefined, stroke: base.getStroke ? base.getStroke() : undefined })];
+      }
+
+      const geomType = geom.getType && geom.getType();
+      // Non-polygon geometries should not get the text label. Show a blue dot for points.
+      if (geomType !== 'Polygon') {
+        if (geomType === 'Point') {
+          const pointStyle = new Style({
+            image: new Origo.ol.style.Circle({
+              radius: 5,
+              fill: new Fill({ color: 'rgba(0,153,255,1)' }),
+              stroke: new Stroke({ color: '#fff', width: 1 })
+            })
+          });
+          return [pointStyle];
+        }
+        const base = styles.defaultStyle();
+        return [new Style({ fill: base.getFill ? base.getFill() : undefined, stroke: base.getStroke ? base.getStroke() : undefined })];
+      }
+
+      // Polygon: compute area and decide style
+      const area = (typeof geom.getArea === 'function') ? geom.getArea() : 0;
+      const baseStyle = (typeof warningLimit === 'number' && area > warningLimit)
+        ? styles.warningStyle()
+        : styles.defaultStyle();
+
+      console.log()
+
+      const fillStroke = new Style({
+        fill: baseStyle.getFill ? baseStyle.getFill() : undefined,
+        stroke: baseStyle.getStroke ? baseStyle.getStroke() : undefined
+      });
+      const strokeOnly = new Style({ stroke: baseStyle.getStroke ? baseStyle.getStroke() : undefined });
+
+      // Create centered label at polygon interior
+      const interior = (typeof geom.getInteriorPoint === 'function') ? geom.getInteriorPoint() : null;
+      const baseText = baseStyle.getText && baseStyle.getText();
+      const labelText = baseText && baseText.getText ? baseText.getText() : '';
+      const labelFont = baseText && baseText.getFont ? baseText.getFont() : undefined;
+      const labelFill = baseText && baseText.getFill ? baseText.getFill() : undefined;
+      const labelStroke = baseText && baseText.getStroke ? baseText.getStroke() : undefined;
+      const labelOffsetY = baseText && baseText.getOffsetY ? baseText.getOffsetY() : undefined;
+
+      const labelStyle = new Style({
+        geometry: interior,
+        text: new Text({
+          text: labelText,
+          font: labelFont,
+          fill: labelFill,
+          stroke: labelStroke,
+          offsetY: labelOffsetY
+        })
+      });
+      // Return fill+stroke, then stroke-only for sketch segments/vertices, then centered label
+      console.log('returning fillStroke, strokeOnly:')
+      console.log(strokeOnly)
+      return [fillStroke, strokeOnly, labelStyle];
+    } catch (err) {
+      console.warn('Error computing feature area for styleFunction:', err);
+    }
+    return [styles.defaultStyle()];
+  }
+
   /* Creates different draw interactions based on tool type */
   function makeDrawInteraction(toolType = 'Polygon') {
-    const source = new VectorSource();
+    // const source = new VectorSource();
+    let layer;
 
-    // Create or get the layer for drawing
     if (!geouttagLayer) {
-      geouttagLayer = new VectorLayer({
-        source,
+      console.log('no geouttagLayer, creating one')
+      layer = new VectorLayer({
+        source: new VectorSource(),
         title: drawlayerTitle || 'Urvalsyta!',
         type: 'GEOJSON',
         drawlayer: true,
         zIndex: 7,
-        group: 'root'
+        group: 'none'
+        //style: styleFunction
       });
-      map.addLayer(geouttagLayer);
-
+      map.addLayer(layer);
+      // assign centralized styleFunction to layer so committed features and overlays match
+      try {
+        if (typeof styleFunction === 'function') layer.setStyle(styleFunction);
+      } catch (err) {
+        console.warn('Could not set layer styleFunction:', err);
+      }
+      geouttagLayer = layer;
       drawHandler.setGeouttagLayer(geouttagLayer);
     } else {
-      // Clear previous drawings
-      geouttagLayer.getSource().clear();
-      // Reset editing when clearing drawings
+      console.log('we have geouttaglayer')
+      layer = geouttagLayer;
+      layer.getSource().clear(); // Just clear, don't replace
       editingInitialized = false;
     }
 
@@ -389,40 +476,71 @@ const Geouttag = function Geouttag(options = {}) {
     switch (toolType) {
       case 'box':
         drawInteraction = new Draw({
-          source: geouttagLayer.getSource(),
+          source: layer.getSource(), // Use the layer's current source
           type: 'Circle',
+          style: styleFunction,
           geometryFunction: createBox()
         });
         break;
 
       case 'squareButton':
         drawInteraction = new Draw({
-          source: geouttagLayer.getSource(),
+          source: layer.getSource(), // Use the layer's current source
           type: 'Circle',
-          geometryFunction: createRegularPolygon(4)
+          geometryFunction: createRegularPolygon(4),
+          style: styleFunction
         });
         break;
 
       case 'Polygon':
       default:
         drawInteraction = new Draw({
-          source: geouttagLayer.getSource(),
-          type: 'Polygon'
+          source: layer.getSource(), // Use the layer's current source
+          type: 'Polygon',
+          style: styleFunction
         });
         break;
     }
 
     drawHandler.setGeouttagInteraction(drawInteraction);
-
     drawInteraction.on('drawstart', drawHandler.onDrawStart);
-    drawInteraction.on('drawend', (evt) => {
-      drawHandler.onDrawEnd(evt);
-      pointerMoveHandler(evt); // Keep your coordinate handling
+
+    geouttagLayer.getSource().on('addfeature', (e) => {
+      console.log('I did receive a feature ')
+      console.log(e)
+      // mark feature as committed so layer/styleFunction can render labels/text
+      try {
+        if (e.feature && typeof e.feature.set === 'function') {
+          e.feature.set('committed', true);
+          if (typeof e.feature.changed === 'function') e.feature.changed();
+        }
+      } catch (err) {
+        console.warn('Could not mark feature committed or call changed():', err);
+      }
+      drawHandler.onDrawEnd(e);
+      updateExportButtonState();
+      pointerMoveHandler(e);
 
       if (!editingInitialized) {
         initializeEditingInteractions();
       }
-    });
+    })
+
+    drawInteraction.on('drawend', (evt) => {
+      console.log('this is drawend')
+      console.log('Features in source immediately:')
+      console.log(layer.getSource().getFeatures())
+      console.log('Features in source after a tick:')
+      setTimeout(() => console.log(layer.getSource().getFeatures()), 0);
+      drawHandler.onDrawEnd(evt);
+      updateExportButtonState();
+      pointerMoveHandler(evt);
+
+      if (!editingInitialized) {
+        initializeEditingInteractions();
+      }
+    }
+  );
 
     return drawInteraction;
   }
@@ -455,6 +573,17 @@ const Geouttag = function Geouttag(options = {}) {
     if (isActive && geouttag) {
       // Remove current interaction
       map.removeInteraction(geouttag);
+      // Clear any existing features so export state sees no selection
+      try {
+        if (geouttagLayer && geouttagLayer.getSource) {
+          const src = geouttagLayer.getSource();
+          if (src && typeof src.clear === 'function') src.clear();
+        }
+      } catch (err) {
+        console.warn('Could not clear geouttagLayer source:', err);
+      }
+
+      updateExportButtonState();
 
       editingInitialized = false;
 
@@ -468,12 +597,17 @@ const Geouttag = function Geouttag(options = {}) {
     }
   }
 
+  function removeGeouttag() {
+    document.getElementById(controlContainer.getId()).classList.add('o-hidden');
+    geouttagLayer.getSource().clear();
+  }
+
   function toggleGeouttag() {
     const controlContainerElement = document.getElementById(controlContainer.getId());
     if (controlContainerElement.classList.contains('o-hidden')) {
       controlContainerElement.classList.remove('o-hidden');
     } else {
-      document.getElementById(controlContainer.getId()).classList.add('o-hidden');
+      removeGeouttag();
     }
 
     const detail = {
@@ -533,7 +667,12 @@ const Geouttag = function Geouttag(options = {}) {
 
       drawHandler = GeouttagDrawHandler({
         stylewindow: null,
-        pointerMoveHandler
+        pointerMoveHandler,
+        Origo,
+        warningLimit,
+        errorLimit,
+        updateExportButtonState,
+        styleFunction
       });
 
       drawHandler.initializeMap(map);
@@ -558,10 +697,11 @@ const Geouttag = function Geouttag(options = {}) {
         });
       }
       // if another click interaction like draw is activated, the geouttag tool button should become inactive and its control panel should vanish
+      // so should its painted feature
       viewer.on('toggleClickInteraction', (e) => {
         if ((e.name !== 'geouttag') && (e.active)) {
           if (isActive) {
-            document.getElementById(controlContainer.getId()).classList.add('o-hidden');
+            removeGeouttag();
           }
         }
       });
@@ -570,23 +710,6 @@ const Geouttag = function Geouttag(options = {}) {
 
       drawToolButtonEvents();
 
-      geouttag.on('drawstart', (e) => {
-        const feature = e.feature;
-        feature.setStyle(createStyle());
-      });
-
-      // drawend is the only relevant event for the rectangle coordinates for the modal
-      geouttag.on('drawend', (e) => {
-        pointerMoveHandler(e);
-
-        // document.getElementById('email').value = (getCookie('email'));
-
-        if (!document.getElementById(controlContainer.getId())) {
-          document.getElementById(viewer.getMain().getId()).append(Origo.ui.dom.html(controlContainer.render()));
-        }
-
-        updateExportButtonState();
-      });
 
       viewer.on('toggleClickInteraction', (detail) => {
         if (detail.name === 'geouttag' && detail.active) {

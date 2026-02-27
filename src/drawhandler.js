@@ -61,57 +61,10 @@ const GeouttagDrawHandler = function GeouttagDrawHandler(options = {}) {
 
   function onDrawStart(evt) {
     //const feature = evt.feature;
-    const feature = evt.feature;
+    //feature.setStyle(styleFunction);
 
-    if (feature.getGeometry().getType() !== 'Point') {
+    if (evt.feature.getGeometry().getType() !== 'Point') {
       disableDoubleClickZoom(evt);
-    }
-
-    // attach geometry change listener to force redraw so overlay segments/vertices update immediately
-    try {
-      const geom = feature.getGeometry();
-      if (geom && typeof geom.on === 'function') {
-        // cleanup any existing listener
-        const prev = feature.get('_geomChangeKey');
-        if (prev) Origo.ol.Observable.unByKey(prev);
-        const key = geom.on('change', () => {
-          try {
-            if (map && typeof map.render === 'function') map.render();
-            if (typeof updateExportButtonState === 'function') updateExportButtonState();
-            // also try to refresh draw overlay/sketch features so segment/vertex styles update
-            try {
-              let overlay = null;
-              if (geouttag) {
-                if (typeof geouttag.getOverlay === 'function') overlay = geouttag.getOverlay();
-                else if (geouttag.overlay_) overlay = geouttag.overlay_;
-              }
-              if (overlay && typeof overlay.getSource === 'function') {
-                const ofs = overlay.getSource().getFeatures();
-                if (ofs && ofs.length) ofs.forEach(of => { try { of.changed(); } catch (e) {} });
-              }
-
-              // fallback: try internal sketch properties on Draw interaction
-              if (geouttag) {
-                ['sketchFeature_', 'sketchPoint_', 'sketchLine_','sketchLineString_'].forEach((key) => {
-                  try {
-                    const obj = geouttag[key];
-                    if (obj && typeof obj.changed === 'function') obj.changed();
-                  } catch (e) {
-                    // ignore
-                  }
-                });
-              }
-            } catch (e) {
-              // ignore overlay refresh errors
-            }
-          } catch (e) {
-            // ignore
-          }
-        });
-        feature.set('_geomChangeKey', key);
-      }
-    } catch (err) {
-      console.warn('Could not attach geom change listener on drawstart:', err);
     }
   }
 
@@ -210,15 +163,6 @@ const GeouttagDrawHandler = function GeouttagDrawHandler(options = {}) {
     if (select) {
       select.getFeatures().clear();
       select.getFeatures().push(feature);
-    }
-
-    // cleanup geom change listener attached during draw
-    try {
-      const key = feature.get('_geomChangeKey');
-      if (key) Origo.ol.Observable.unByKey(key);
-      feature.unset('_geomChangeKey');
-    } catch (err) {
-      // ignore
     }
 
     // Deactivate drawing after completion

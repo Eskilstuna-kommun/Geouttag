@@ -3,6 +3,7 @@ import 'Origo';
 import loadSVGs from './loadresources';
 import GeouttagDrawHandler from './drawhandler';
 import styles from './styles';
+import style from '../../src/style';
 
 const Draw = Origo.ol.interaction.Draw;
 const createBox = Origo.ol.interaction.Draw.createBox;
@@ -83,8 +84,9 @@ const Geouttag = function Geouttag(options = {}) {
     const hasFileTypeSelection = !fileTypeSelectElement.disabled
       && fileTypeSelectElement.options.length > 0
       && !!fileTypeSelectElement.value;
-    console.log('this is feature 0 of the geouttagLayer source')
+    console.log(`this is the area of feature 0 of the geouttagLayer source ${geouttagLayer.getSource().getFeatures()[0]?.getGeometry().getArea()} and this is the limit area: ${warningLimit}`)
     console.log(geouttagLayer.getSource().getFeatures()[0]?.getGeometry().getArea())
+    // console.log('and this is the defined warningLimit')
     const hasOkArea = geouttagLayer.getSource().getFeatures()[0]?.getGeometry().getArea() < warningLimit;
     console.log(`hasProductSelection ${hasProductSelection}, hasMapLayerSelection ${hasMapLayerSelection}, hasFileTypeSelection ${hasFileTypeSelection}, hasDefinedArea ${hasOkArea}`);
 
@@ -212,7 +214,7 @@ const Geouttag = function Geouttag(options = {}) {
               padding: 0;
               box-sizing: border-box;
             }
-            
+
             body {
               width: 100vw;
               height: 100vh;
@@ -224,7 +226,7 @@ const Geouttag = function Geouttag(options = {}) {
               font-family: Arial, sans-serif;
               overflow: hidden;
             }
-            
+
             .spinner {
               border: 4px solid #f3f3f3;
               border-top: 4px solid #3498db;
@@ -234,19 +236,19 @@ const Geouttag = function Geouttag(options = {}) {
               animation: spin 1s linear infinite;
               margin-bottom: 20px;
             }
-            
+
             @keyframes spin {
               0% { transform: rotate(0deg); }
               100% { transform: rotate(360deg); }
             }
-            
+
             .message {
               font-size: 18px;
               color: #333;
               text-align: center;
               padding: 0 20px;
             }
-            
+
             .iframe-container {
               position: fixed;
               top: 0;
@@ -255,7 +257,7 @@ const Geouttag = function Geouttag(options = {}) {
               height: 100%;
               display: none;
             }
-            
+
             .iframe-container iframe {
               width: 100%;
               height: 100%;
@@ -266,24 +268,24 @@ const Geouttag = function Geouttag(options = {}) {
         <body>
           <div class="spinner"></div>
           <p class="message">Väntar på export av <strong>${displayProductNames}</strong> från FME Flow...<br><br>Låt fönstret vara öppet och vänta tills exporten är klar.<br><br>Om du stänger fönstret innan exporten är klar måste du starta om exporten.</p>
-          
+
           <div class="iframe-container" id="iframe-container">
             <iframe id="export-iframe" src="${requestUrl}" title="Export"></iframe>
           </div>
-          
+
           <script>
             // Hide spinner and show iframe when it loads
             const iframe = document.getElementById('export-iframe');
             const container = document.getElementById('iframe-container');
             const spinner = document.querySelector('.spinner');
             const message = document.querySelector('.message');
-            
+
             iframe.addEventListener('load', function() {
               spinner.style.display = 'none';
               message.style.display = 'none';
               container.style.display = 'block';
             });
-            
+
             // Fallback: if iframe doesn't load within 30 seconds, show error
             setTimeout(function() {
               if (container.style.display !== 'block') {
@@ -345,7 +347,7 @@ const Geouttag = function Geouttag(options = {}) {
     // Create select interaction for selecting features to edit
     const select = new Origo.ol.interaction.Select({
       layers: [geouttagLayer],
-      style: null,
+      style: styles.standardCompletedStyle,
       hitTolerance: 5
     });
 
@@ -366,81 +368,35 @@ const Geouttag = function Geouttag(options = {}) {
     editingInitialized = true;
   }
 
-  function styleFunction(feature) {
-    try {
-      if (!feature || !feature.getGeometry) {
-        const base = styles.defaultStyle();
-        return [new Style({ fill: base.getFill ? base.getFill() : undefined, stroke: base.getStroke ? base.getStroke() : undefined })];
-      }
-
-      const geom = feature.getGeometry();
-      if (!geom) {
-        const base = styles.defaultStyle();
-        return [new Style({ fill: base.getFill ? base.getFill() : undefined, stroke: base.getStroke ? base.getStroke() : undefined })];
-      }
-
-      const geomType = geom.getType && geom.getType();
-      // Non-polygon geometries should not get the text label. Show a blue dot for points.
-      if (geomType !== 'Polygon') {
-        if (geomType === 'Point') {
-          const pointStyle = new Style({
-            image: new Origo.ol.style.Circle({
-              radius: 5,
-              fill: new Fill({ color: 'rgba(0,153,255,1)' }),
-              stroke: new Stroke({ color: '#fff', width: 1 })
-            })
-          });
-          return [pointStyle];
-        }
-        const base = styles.defaultStyle();
-        return [new Style({ fill: base.getFill ? base.getFill() : undefined, stroke: base.getStroke ? base.getStroke() : undefined })];
-      }
-
-      // Polygon: compute area and decide style
-      const area = (typeof geom.getArea === 'function') ? geom.getArea() : 0;
-      const baseStyle = (typeof warningLimit === 'number' && area > warningLimit)
-        ? styles.warningStyle()
-        : styles.defaultStyle();
-
-      console.log()
-
-      const fillStroke = new Style({
-        fill: baseStyle.getFill ? baseStyle.getFill() : undefined,
-        stroke: baseStyle.getStroke ? baseStyle.getStroke() : undefined
-      });
-      const strokeOnly = new Style({ stroke: baseStyle.getStroke ? baseStyle.getStroke() : undefined });
-
-      // Create centered label at polygon interior
-      const interior = (typeof geom.getInteriorPoint === 'function') ? geom.getInteriorPoint() : null;
-      const baseText = baseStyle.getText && baseStyle.getText();
-      const labelText = baseText && baseText.getText ? baseText.getText() : '';
-      const labelFont = baseText && baseText.getFont ? baseText.getFont() : undefined;
-      const labelFill = baseText && baseText.getFill ? baseText.getFill() : undefined;
-      const labelStroke = baseText && baseText.getStroke ? baseText.getStroke() : undefined;
-      const labelOffsetY = baseText && baseText.getOffsetY ? baseText.getOffsetY() : undefined;
-
-      const labelStyle = new Style({
-        geometry: interior,
-        text: new Text({
-          text: labelText,
-          font: labelFont,
-          fill: labelFill,
-          stroke: labelStroke,
-          offsetY: labelOffsetY
-        })
-      });
-      // Return fill+stroke, then stroke-only for sketch segments/vertices, then centered label
-      console.log('returning fillStroke, strokeOnly:')
-      console.log(strokeOnly)
-      return [fillStroke, strokeOnly, labelStyle];
-    } catch (err) {
-      console.warn('Error computing feature area for styleFunction:', err);
+  function calculateStyle(feature, isSelected) {
+    const geometry = feature.getGeometry();
+    if (!geometry || geometry.getType() !== 'Polygon') {
+      return new Style({});
     }
-    return [styles.defaultStyle()];
+
+    const area = Math.abs(geometry.getArea());
+    // parallella stilar för selected behövs
+    // parallella warning och interaction
+    // hmm, ett vektorlager kan ha flera stilar, en array där ordningen spelar roll
+    //
+    if (area > warningLimit) {
+      return isSelected ? styles.warningStyle : [styles.warningStyle, styles.unSelectedStyle];
+    }
+    return isSelected ? styles.standardInteractionStyle : [styles.standardInteractionStyle, styles.unSelectedStyle];
   }
+
+  function selectedStyleFunction(feature) { // the decision on what style bits to employ looks different for the finished feature (select can also influense, why else have a select)
+    return calculateStyle(feature, true);
+  }
+  function styleFunction(feature) {
+    return calculateStyle(feature, false);
+  }
+
+  //function selectedStyleFunction // som existerande men lite ljusare kantlinje
 
   /* Creates different draw interactions based on tool type */
   function makeDrawInteraction(toolType = 'Polygon') {
+    console.log('this is makedrawinteraction')
     // const source = new VectorSource();
     let layer;
 
@@ -452,16 +408,12 @@ const Geouttag = function Geouttag(options = {}) {
         type: 'GEOJSON',
         drawlayer: true,
         zIndex: 7,
-        group: 'none'
-        //style: styleFunction
+        group: 'root',
+        style: styleFunction // in order for the finished feature to share a style with itself being drawn the interaction and layer need the same stylefunction
       });
       map.addLayer(layer);
-      // assign centralized styleFunction to layer so committed features and overlays match
-      try {
-        if (typeof styleFunction === 'function') layer.setStyle(styleFunction);
-      } catch (err) {
-        console.warn('Could not set layer styleFunction:', err);
-      }
+
+
       geouttagLayer = layer;
       drawHandler.setGeouttagLayer(geouttagLayer);
     } else {
@@ -505,65 +457,17 @@ const Geouttag = function Geouttag(options = {}) {
     drawHandler.setGeouttagInteraction(drawInteraction);
     drawInteraction.on('drawstart', drawHandler.onDrawStart);
 
-    geouttagLayer.getSource().on('addfeature', (e) => {
-      console.log('I did receive a feature ')
-      console.log(e)
-      // mark feature as committed so layer/styleFunction can render labels/text
-      try {
-        if (e.feature && typeof e.feature.set === 'function') {
-          e.feature.set('committed', true);
-          if (typeof e.feature.changed === 'function') e.feature.changed();
-        }
-      } catch (err) {
-        console.warn('Could not mark feature committed or call changed():', err);
-      }
-      drawHandler.onDrawEnd(e);
-      updateExportButtonState();
-      pointerMoveHandler(e);
-
-      if (!editingInitialized) {
-        initializeEditingInteractions();
-      }
-    })
 
     drawInteraction.on('drawend', (evt) => {
-      console.log('this is drawend')
-      console.log('Features in source immediately:')
-      console.log(layer.getSource().getFeatures())
-      console.log('Features in source after a tick:')
-      setTimeout(() => console.log(layer.getSource().getFeatures()), 0);
       drawHandler.onDrawEnd(evt);
       updateExportButtonState();
+      setTimeout(updateExportButtonState, 0); // "on next tick" för att featuren finns inte i sourcen annars
       pointerMoveHandler(evt);
-
-      if (!editingInitialized) {
-        initializeEditingInteractions();
-      }
-    }
-  );
+    });
 
     return drawInteraction;
   }
 
-  // default style for the rectangle
-  function createStyle() {
-    return new Style({
-      fill: new Fill({
-        color: 'rgba(255, 255, 255, 0.4)'
-      }),
-      stroke: new Stroke({
-        color: '#ffcc33',
-        width: 2
-      }),
-      text: new Text({
-        text: 'Area att exportera',
-        font: '14px Calibri,sans-serif',
-        fill: new Fill({ color: '#000' }),
-        stroke: new Stroke({ color: '#fff', width: 3 }),
-        offsetY: -10
-      })
-    });
-  }
 
   // Function to change draw tool
   function changeDrawTool(toolType) {
@@ -672,6 +576,7 @@ const Geouttag = function Geouttag(options = {}) {
         warningLimit,
         errorLimit,
         updateExportButtonState,
+        selectedStyleFunction,
         styleFunction
       });
 

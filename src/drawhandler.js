@@ -1,4 +1,8 @@
 /* eslint-disable no-console */
+import 'Origo';
+const { Style, Fill, Stroke, Text } = Origo.ol.style;
+import styles from './styles';
+
 
 const GeouttagDrawHandler = function GeouttagDrawHandler(options = {}) {
   const {
@@ -8,11 +12,12 @@ const GeouttagDrawHandler = function GeouttagDrawHandler(options = {}) {
     warningLimit,
     errorLimit,
     updateExportButtonState,
+    selectedStyleFunction,
     styleFunction
   } = options;
 
   const DoubleClickZoom = Origo.ol.interaction.DoubleClickZoom;
- 
+
   const { Select, Modify, Translate } = Origo.ol.interaction;
 
   let geouttagLayer;
@@ -28,7 +33,7 @@ const GeouttagDrawHandler = function GeouttagDrawHandler(options = {}) {
     geouttag = interaction;
   }
 
-  function setGeouttagLayer(layer) {
+  function setGeouttagLayer(layer) { // method for the drawhandler to become aware of the current vector layer
     geouttagLayer = layer;
   }
 
@@ -110,12 +115,7 @@ const GeouttagDrawHandler = function GeouttagDrawHandler(options = {}) {
       } else {
         console.warn('pointerMoveHandler not available - coordinates not updated');
       }
-      // Re-evaluate style based on updated geometry
-      try {
-        if (typeof feature.changed === 'function') feature.changed();
-      } catch (err) {
-        console.warn('Could not refresh feature style after modify:', err);
-      }
+
       try {
         if (typeof updateExportButtonState === 'function') updateExportButtonState();
       } catch (err) {
@@ -129,23 +129,26 @@ const GeouttagDrawHandler = function GeouttagDrawHandler(options = {}) {
     const feature = evt.feature;
 
 
+
     //enableDoubleClickZoom();
 
-    if (stylewindow && stylewindow.getStyleObject) {
+    /*if (stylewindow && stylewindow.getStyleObject) {
       const styleObject = stylewindow.getStyleObject(feature);
       feature.set('origostyle', styleObject);
-    }
+    } */
 
-      if (!select) {
-      console.log('creating a new select')
+    if (!select) {
       select = new Select({
         layers: [geouttagLayer],
-        style: styleFunction,
+        style: selectedStyleFunction,
         hitTolerance: 5
       });
       map.addInteraction(select);
+      // Select hanterar selekterad - inte selekterad själv genom att applicera sin stil när selekterad
+      // så ha "aktiv" stil för selekterad och låt lagret starta på "inaktiv"
+      // select.getFeatures().on('remove', onSelectRemove);
 
-      select.getFeatures().on('add', onSelectAdd);
+     // select.getFeatures().on('add', onSelectAdd);
     }
 
     const translateInteraction = new Translate({
@@ -153,6 +156,10 @@ const GeouttagDrawHandler = function GeouttagDrawHandler(options = {}) {
     });
     map.addInteraction(translateInteraction);
 
+    if (modify) {
+      console.log('modify was already defined so removing this interaction')
+      map.removeInteraction(modify)
+    }
     console.log('creating a new modify')
     modify = new Modify({
       features: select.getFeatures()
@@ -176,10 +183,9 @@ const GeouttagDrawHandler = function GeouttagDrawHandler(options = {}) {
     console.log('Draw completed for export area');
   }
 
-  function onSelectRemove(e) {
-    if (e.element) {
-      console.log('Deselected feature:', e.element);
-    }
+  function onSelectRemove() {
+    console.log('selection removed, setting style to the original styleFunction')
+    geouttagLayer.setStyle(selectedStyleFunction)
   }
 
   return {

@@ -3,31 +3,21 @@ import 'Origo';
 import loadSVGs from './loadresources';
 import GeouttagDrawHandler from './drawhandler';
 import styles from './styles';
-import style from '../../src/style';
 
 const Draw = Origo.ol.interaction.Draw;
-const createBox = Origo.ol.interaction.Draw.createBox;
-const createRegularPolygon = Origo.ol.interaction.Draw.createRegularPolygon;
+// const createBox = Origo.ol.interaction.Draw.createBox;
+const { createRegularPolygon, createBox } = Origo.ol.interaction.Draw;
 const VectorSource = Origo.ol.source.Vector;
 const VectorLayer = Origo.ol.layer.Vector;
-const { Style, Fill, Stroke, Text } = Origo.ol.style;
+const { Style } = Origo.ol.style;
 
 /* Geouttag is a tool to request FME server to
      export data from a marked area in map */
 const Geouttag = function Geouttag(options = {}) {
   const {
     url = '',
-    contactMail = '',
-    filePath = '',
-    infoLink = '',
-    logo = '',
     warningLimit,
-    warningTooltip = 'varning',
-    warningText = 'varning',
     errorLimit,
-    errorTooltip = 'error',
-    errorText = 'error',
-    infoText = '',
     predefinedExports = [],
     maplayerExport = {},
     drawlayerTitle = ''
@@ -35,18 +25,12 @@ const Geouttag = function Geouttag(options = {}) {
   } = options;
 
   let viewer;
-  let measureStyleOptions;
   let map;
-  let projectionCode;
   let geouttag;
   let x1; let y1; let x2; let y2;
   let exportBtn;
-  let layerTypeSelect;
-  let mapLayerSelect;
   let productSelect;
   let fileTypeSelect;
-  let mapExports;
-  let allExports;
   let isActive = false;
   let geouttagButton;
   let controlContainer;
@@ -56,25 +40,25 @@ const Geouttag = function Geouttag(options = {}) {
   let squareSelectionButton;
   let headerComp;
   let productSelectorTextComp;
+  let additionalLayersTextComp;
   let formatSelectorTextComp;
   let drawToolSelectorTextComp;
   let customSelect;
   let customSelectOptionsDropdown;
   let customSelectSelectedOptions;
   let customSelectInput;
+  let mapLayerOptionElements = [];
   let selectedValues = [];
   let geouttagLayer;
   let currentDrawType = 'Polygon';
   let coords;
   let drawHandler;
-  let editingInitialized = false;
   const restrictedLayers = [];
 
   loadSVGs();
 
   /* State for the export button, if it should be enabled or disabled */
   function updateExportButtonState() {
-    console.log('this is updateExportButtonState')
     const exportBtnElement = document.getElementById(exportBtn.getId());
     const productSelectElement = document.getElementById(productSelect.getId());
     const fileTypeSelectElement = document.getElementById(fileTypeSelect.getId());
@@ -84,12 +68,7 @@ const Geouttag = function Geouttag(options = {}) {
     const hasFileTypeSelection = !fileTypeSelectElement.disabled
       && fileTypeSelectElement.options.length > 0
       && !!fileTypeSelectElement.value;
-    console.log(`this is the area of feature 0 of the geouttagLayer source ${geouttagLayer.getSource().getFeatures()[0]?.getGeometry().getArea()} and this is the limit area: ${warningLimit}`)
-    console.log(geouttagLayer.getSource().getFeatures()[0]?.getGeometry().getArea())
-    // console.log('and this is the defined warningLimit')
     const hasOkArea = geouttagLayer.getSource().getFeatures()[0]?.getGeometry().getArea() < warningLimit;
-    console.log(`hasProductSelection ${hasProductSelection}, hasMapLayerSelection ${hasMapLayerSelection}, hasFileTypeSelection ${hasFileTypeSelection}, hasDefinedArea ${hasOkArea}`);
-
     const exportReady = (hasProductSelection || hasMapLayerSelection) && hasFileTypeSelection && hasOkArea;
     exportBtnElement.disabled = !exportReady;
   }
@@ -110,7 +89,6 @@ const Geouttag = function Geouttag(options = {}) {
     filetypeSelectElement.innerHTML = optionsHtml;
     if ((filetypeSelectElement.options.length > 0) && (filetypeSelectElement.disabled)) filetypeSelectElement.disabled = false;
     else if ((filetypeSelectElement.options.length === 0) && (filetypeSelectElement.disabled === false)) filetypeSelectElement.disabled = true;
-    //updateExportButtonState();
   }
 
   function getMaplayerOptions({ mapLayers, predefined }) {
@@ -128,6 +106,21 @@ const Geouttag = function Geouttag(options = {}) {
         }
       });
       return layerOptionElement;
+    });
+  }
+
+  function filterCustomOptions(filterText) {
+    const text = (filterText || '').trim().toLowerCase();
+    const customSelectOptions = customSelectOptionsDropdown.getComponents().map(c => document.getElementById(c.getId()));
+    customSelectOptions.forEach((optEl) => {
+      if (!optEl) return;
+      const title = (optEl.getAttribute('data-title') || optEl.textContent || '').toLowerCase();
+      const optionsElement = optEl;
+      if (!text || title.indexOf(text) !== -1) {
+        optionsElement.style.display = 'block';
+      } else {
+        optionsElement.style.display = 'none';
+      }
     });
   }
 
@@ -335,54 +328,38 @@ const Geouttag = function Geouttag(options = {}) {
     }
   }
 
-  function initializeEditingInteractions() {
-    if (!geouttagLayer) {
-      return;
-    }
-
-    if (!map) {
-      return;
-    }
-
-    // Create select interaction for selecting features to edit
-    const select = new Origo.ol.interaction.Select({
-      layers: [geouttagLayer],
-      style: styles.standardCompletedStyle,
-      hitTolerance: 5
-    });
-
-    // Create modify interaction for editing selected features
-    const modify = new Origo.ol.interaction.Modify({
-      features: select.getFeatures()
-    });
-
-    // Add interactions to map
-    map.addInteraction(select);
-    map.addInteraction(modify);
-
-    // Add event listeners
-    select.getFeatures().on('add', drawHandler.onSelectAdd);
-    select.getFeatures().on('remove', drawHandler.onSelectRemove);
-    modify.on('modifyend', drawHandler.onModifyEnd);
-
-    editingInitialized = true;
-  }
-
   function calculateStyle(feature, isSelected) {
     const geometry = feature.getGeometry();
+
+    // 1. Handle the Point (the moving cursor/vertex during drawing)
+    if (geometry && geometry.getType() === 'Point') {
+      return [styles.standardInteractionStyle];
+    }
+
+    // 2. Handle the Polygon (the shape being drawn)
     if (!geometry || geometry.getType() !== 'Polygon') {
       return new Style({});
     }
 
     const area = Math.abs(geometry.getArea());
-    // parallella stilar för selected behövs
-    // parallella warning och interaction
-    // hmm, ett vektorlager kan ha flera stilar, en array där ordningen spelar roll
-    //
-    if (area > warningLimit) {
-      return isSelected ? styles.warningStyle : [styles.warningStyle, styles.unSelectedStyle];
+
+    // Choose the base styling based on your business logic
+    const areaStyle = area > warningLimit ? styles.warningStyle : styles.standardInteractionStyle;
+
+    // 3. Combine styles:
+    // [defaultEditingStyle] provides the sketch-line feel
+    // [areaStyle] provides your specific logic
+    // [styles.unSelectedStyle] applies if not selected
+
+    if (isSelected) {
+      if (areaStyle === styles.standardInteractionStyle) {
+        return [styles.standardInteractionStyle];
+      }
+      return [areaStyle];
+    } else if (areaStyle === styles.standardInteractionStyle) {
+      return [styles.standardInteractionStyle, styles.extraStrokeStyle];
     }
-    return isSelected ? styles.standardInteractionStyle : [styles.standardInteractionStyle, styles.unSelectedStyle];
+    return [areaStyle, styles.extraStrokeStyle];
   }
 
   function selectedStyleFunction(feature) { // the decision on what style bits to employ looks different for the finished feature (select can also influense, why else have a select)
@@ -392,16 +369,11 @@ const Geouttag = function Geouttag(options = {}) {
     return calculateStyle(feature, false);
   }
 
-  //function selectedStyleFunction // som existerande men lite ljusare kantlinje
-
   /* Creates different draw interactions based on tool type */
   function makeDrawInteraction(toolType = 'Polygon') {
-    console.log('this is makedrawinteraction')
-    // const source = new VectorSource();
     let layer;
 
     if (!geouttagLayer) {
-      console.log('no geouttagLayer, creating one')
       layer = new VectorLayer({
         source: new VectorSource(),
         title: drawlayerTitle || 'Urvalsyta!',
@@ -409,18 +381,15 @@ const Geouttag = function Geouttag(options = {}) {
         drawlayer: true,
         zIndex: 7,
         group: 'root',
-        style: styleFunction // in order for the finished feature to share a style with itself being drawn the interaction and layer need the same stylefunction
+        style: styleFunction
       });
       map.addLayer(layer);
-
 
       geouttagLayer = layer;
       drawHandler.setGeouttagLayer(geouttagLayer);
     } else {
-      console.log('we have geouttaglayer')
       layer = geouttagLayer;
-      layer.getSource().clear(); // Just clear, don't replace
-      editingInitialized = false;
+      layer.getSource().clear();
     }
 
     let drawInteraction;
@@ -428,35 +397,34 @@ const Geouttag = function Geouttag(options = {}) {
     switch (toolType) {
       case 'box':
         drawInteraction = new Draw({
-          source: layer.getSource(), // Use the layer's current source
+          source: layer.getSource(),
           type: 'Circle',
-          style: styleFunction,
+          style: selectedStyleFunction,
           geometryFunction: createBox()
         });
         break;
 
       case 'squareButton':
         drawInteraction = new Draw({
-          source: layer.getSource(), // Use the layer's current source
+          source: layer.getSource(),
           type: 'Circle',
           geometryFunction: createRegularPolygon(4),
-          style: styleFunction
+          style: selectedStyleFunction
         });
         break;
 
       case 'Polygon':
       default:
         drawInteraction = new Draw({
-          source: layer.getSource(), // Use the layer's current source
+          source: layer.getSource(),
           type: 'Polygon',
-          style: styleFunction
+          style: selectedStyleFunction
         });
         break;
     }
 
     drawHandler.setGeouttagInteraction(drawInteraction);
     drawInteraction.on('drawstart', drawHandler.onDrawStart);
-
 
     drawInteraction.on('drawend', (evt) => {
       drawHandler.onDrawEnd(evt);
@@ -467,7 +435,6 @@ const Geouttag = function Geouttag(options = {}) {
 
     return drawInteraction;
   }
-
 
   // Function to change draw tool
   function changeDrawTool(toolType) {
@@ -488,8 +455,6 @@ const Geouttag = function Geouttag(options = {}) {
       }
 
       updateExportButtonState();
-
-      editingInitialized = false;
 
       // Create new interaction with selected tool (event handlers attached automatically)
       geouttag = makeDrawInteraction(toolType);
@@ -582,7 +547,7 @@ const Geouttag = function Geouttag(options = {}) {
 
       drawHandler.initializeMap(map);
 
-      projectionCode = map.getView().getProjection();
+      // projectionCode = map.getView().getProjection();
       const mapLayers = Object.keys(maplayerExport).length ? viewer.getLayers().filter((layer) => layer.get('geouttag')) : [];
 
       try {
@@ -614,7 +579,6 @@ const Geouttag = function Geouttag(options = {}) {
       geouttag = makeDrawInteraction();
 
       drawToolButtonEvents();
-
 
       viewer.on('toggleClickInteraction', (detail) => {
         if (detail.name === 'geouttag' && detail.active) {
@@ -666,10 +630,8 @@ const Geouttag = function Geouttag(options = {}) {
         const inputEl = document.getElementById(customSelectInput.getId());
         if (!optionsDropdownEl || !inputEl) return;
         const rect = inputEl.getBoundingClientRect();
-        // Toggle visibility and float the dropdown above the control container by moving it to body
         if (optionsDropdownEl.style.display === 'block') {
           optionsDropdownEl.style.display = 'none';
-          // move it back under the custom select component to keep DOM tidy
           const customSelectEl = document.getElementById(customSelect.getId());
           if (customSelectEl && customSelectEl.contains(optionsDropdownEl) === false) {
             customSelectEl.appendChild(optionsDropdownEl);
@@ -685,7 +647,25 @@ const Geouttag = function Geouttag(options = {}) {
         }
       });
 
-      const mapLayerOptions = customSelectOptionsDropdown.getComponents().map((component) => document.getElementById(component.getId()));
+      document.getElementById(customSelectInput.getId()).addEventListener('input', (e) => {
+        const optionsDropdownEl = document.getElementById(customSelectOptionsDropdown.getId());
+        const inputEl = document.getElementById(customSelectInput.getId());
+        if (!optionsDropdownEl || !inputEl) return;
+        const rect = inputEl.getBoundingClientRect();
+        if (optionsDropdownEl.style.display !== 'block') {
+          optionsDropdownEl.style.position = 'absolute';
+          optionsDropdownEl.style.left = `${rect.left + window.scrollX}px`;
+          optionsDropdownEl.style.top = `${rect.bottom + window.scrollY}px`;
+          optionsDropdownEl.style.maxWidth = `${rect.width}px`;
+          optionsDropdownEl.style.zIndex = '10000';
+          optionsDropdownEl.style.display = 'block';
+          document.body.appendChild(optionsDropdownEl);
+        }
+        filterCustomOptions(e.target.value);
+      });
+
+      mapLayerOptionElements = customSelectOptionsDropdown.getComponents().map((component) => document.getElementById(component.getId()));
+      const mapLayerOptions = mapLayerOptionElements;
 
       // eventlisteners behövs för varje option samt dess tagg
       mapLayerOptions.forEach(mapLayerOption => {
@@ -714,7 +694,7 @@ const Geouttag = function Geouttag(options = {}) {
               }
               tag.remove();
             });
-            selectedOptions.appendChild(tag);
+            selectedOptions.append(tag);
           } else {
             selectedValues = selectedValues.filter(v => v !== layerName);
             if (selectedValues.length === 0) {
@@ -751,10 +731,10 @@ const Geouttag = function Geouttag(options = {}) {
         tagName: 'input',
         attributes: {
           type: 'text',
-          placeholder: 'Välj kartlager..',
-          readonly: true
+          placeholder: 'Välj kartlager..'
+          // allow typing to filter options
         },
-        cls: 'select-input'
+        cls: 'select-input custom-select-input text-small'
       });
 
       customSelectOptionsDropdown = Origo.ui.Element({
@@ -766,7 +746,7 @@ const Geouttag = function Geouttag(options = {}) {
       customSelect = Origo.ui.Element({
         tagName: 'div',
         cls: 'custom-select',
-        components: [customSelectOptionsDropdown, customSelectInput, customSelectSelectedOptions]
+        components: [customSelectOptionsDropdown, customSelectInput]
       });
 
       geouttagButton = Origo.ui.Button({
@@ -790,12 +770,9 @@ const Geouttag = function Geouttag(options = {}) {
         innerHTML: 'Starta export'
       });
 
-      layerTypeSelect = Origo.ui.Element({
-        tagName: 'select'
-      });
-
       productSelect = Origo.ui.Element({
         tagName: 'select',
+        cls: 'text-small',
         innerHTML: getSelectOptionsHtml({
           selectOptions: predefinedExports,
           defaultNothing: {
@@ -811,26 +788,32 @@ const Geouttag = function Geouttag(options = {}) {
 
       headerComp = Origo.ui.Element({
         tagName: 'h3',
-        innerHTML: 'Geouttag',
+        innerHTML: 'GeoUttag',
         style: 'text-align: center;'
       });
 
       productSelectorTextComp = Origo.ui.Element({
         tagName: 'p',
         innerHTML: 'Välj en produkt eller ett till flera lager i kartan',
-        cls: 'text-smaller'
+        cls: 'text-small padding-bottom-small padding-left-small'
+      });
+
+      additionalLayersTextComp = Origo.ui.Element({
+        tagName: 'p',
+        innerHTML: "Syns inte lagret du önskar, saknar du något?<br>Mejla <a href='mailto:gissupport@eskilstuna.se'>gissupport@eskilstuna.se",
+        cls: 'text-smaller padding-bottom-small padding-left-small'
       });
 
       formatSelectorTextComp = Origo.ui.Element({
         tagName: 'p',
         innerHTML: 'Välj ett exportformat',
-        cls: 'text-smaller'
+        cls: 'text-small padding-top-large padding-bottom-small padding-left-small'
       });
 
       drawToolSelectorTextComp = Origo.ui.Element({
         tagName: 'p',
         innerHTML: 'Välj ett verktyg för att rita önskat område att exportera',
-        cls: 'text-smaller',
+        cls: 'text-small padding-left-small',
         style: 'padding-bottom: 0.4rem;'
       });
 
@@ -870,7 +853,7 @@ const Geouttag = function Geouttag(options = {}) {
           width: '25rem',
           'z-index': '-1'
         },
-        components: [headerComp, productSelectorTextComp, productSelect, customSelect, formatSelectorTextComp, fileTypeSelect, drawToolSelectorTextComp, drawToolbarComp, exportBtn]
+        components: [headerComp, productSelectorTextComp, productSelect, customSelect, additionalLayersTextComp, customSelectSelectedOptions, formatSelectorTextComp, fileTypeSelect, drawToolSelectorTextComp, drawToolbarComp, exportBtn]
       });
 
       // Ensure controlContainer is registered as a child component so its

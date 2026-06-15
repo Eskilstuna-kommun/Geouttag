@@ -1,19 +1,12 @@
 /* eslint-disable no-console */
 import 'Origo';
-const { Style, Fill, Stroke, Text } = Origo.ol.style;
-import styles from './styles';
-
 
 const GeouttagDrawHandler = function GeouttagDrawHandler(options = {}) {
   const {
-    stylewindow,
     pointerMoveHandler,
     Origo,
-    warningLimit,
-    errorLimit,
     updateExportButtonState,
-    selectedStyleFunction,
-    styleFunction
+    selectedStyleFunction
   } = options;
 
   const DoubleClickZoom = Origo.ol.interaction.DoubleClickZoom;
@@ -25,7 +18,6 @@ const GeouttagDrawHandler = function GeouttagDrawHandler(options = {}) {
   let map;
   let select;
   let modify;
-  let translate;
 
   // default style for the rectangle
 
@@ -65,9 +57,6 @@ const GeouttagDrawHandler = function GeouttagDrawHandler(options = {}) {
   }
 
   function onDrawStart(evt) {
-    //const feature = evt.feature;
-    //feature.setStyle(styleFunction);
-
     if (evt.feature.getGeometry().getType() !== 'Point') {
       disableDoubleClickZoom(evt);
     }
@@ -127,12 +116,9 @@ const GeouttagDrawHandler = function GeouttagDrawHandler(options = {}) {
 
   function onDrawEnd(evt) {
     const feature = evt.feature;
+    enableDoubleClickZoom();
 
-
-
-    //enableDoubleClickZoom();
-
-    /*if (stylewindow && stylewindow.getStyleObject) {
+    /* if (stylewindow && stylewindow.getStyleObject) {
       const styleObject = stylewindow.getStyleObject(feature);
       feature.set('origostyle', styleObject);
     } */
@@ -145,10 +131,6 @@ const GeouttagDrawHandler = function GeouttagDrawHandler(options = {}) {
       });
       map.addInteraction(select);
       // Select hanterar selekterad - inte selekterad själv genom att applicera sin stil när selekterad
-      // så ha "aktiv" stil för selekterad och låt lagret starta på "inaktiv"
-      // select.getFeatures().on('remove', onSelectRemove);
-
-     // select.getFeatures().on('add', onSelectAdd);
     }
 
     const translateInteraction = new Translate({
@@ -157,10 +139,8 @@ const GeouttagDrawHandler = function GeouttagDrawHandler(options = {}) {
     map.addInteraction(translateInteraction);
 
     if (modify) {
-      console.log('modify was already defined so removing this interaction')
-      map.removeInteraction(modify)
+      map.removeInteraction(modify);
     }
-    console.log('creating a new modify')
     modify = new Modify({
       features: select.getFeatures()
     });
@@ -183,11 +163,6 @@ const GeouttagDrawHandler = function GeouttagDrawHandler(options = {}) {
     console.log('Draw completed for export area');
   }
 
-  function onSelectRemove() {
-    console.log('selection removed, setting style to the original styleFunction')
-    geouttagLayer.setStyle(selectedStyleFunction)
-  }
-
   return {
     name: 'GeouttagDrawHandler',
     setGeouttagInteraction,
@@ -198,7 +173,6 @@ const GeouttagDrawHandler = function GeouttagDrawHandler(options = {}) {
     addDoubleClickZoomInteraction,
     enableDoubleClickZoom,
     onSelectAdd,
-    onSelectRemove,
     onModifyEnd,
     onDrawEnd
   };

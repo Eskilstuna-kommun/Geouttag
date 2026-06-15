@@ -73,7 +73,11 @@
   width: max;
   border: 1px solid #ccc;
   border-radius: 4px;
-  padding: 5px;
+  /*padding: 0.25rem 0.75rem; /* reduce vertical padding */
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.4rem; /* match native select height */
+  box-sizing: border-box;
 }
 
 .selected-options {
@@ -98,13 +102,35 @@
   cursor: pointer;
 }
 
-.select-input {
+.custom-select .select-input {
   width: 100%;
   border: none;
   outline: none;
-  padding: 5px;
+  line-height: 1.5;
+  box-sizing: border-box;
   cursor: pointer;
+  resize: none;
 }
+
+.custom-select-input {
+  text-align: left; /* Align text to the left */
+  padding-left: 10px; /* Add some padding to the left */
+  width: 100%; /* Ensure the input takes the full width of its container */
+}
+
+/* Edge, Chrome specific styles */
+.custom-select .custom-select-input {
+  text-indent: 4px; /* Adjust the text indent to align with the select element */
+}
+
+/* Firefox specific styles */
+@-moz-document url-prefix() {
+  .custom-select .custom-select-input {
+    text-indent: 0px; /* Reset the text indent for Firefox */
+  }
+}
+
+
 
 /* Ensure placeholder and input text are rendered in black like native selects */
 .select-input::placeholder {

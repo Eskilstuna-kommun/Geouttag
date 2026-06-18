@@ -9,6 +9,7 @@
 .export-btn{
     background: #dbdbdb;
     margin-top: 1.3rem;
+    border-radius: 16px;
 }
 
 .export-btn:disabled{
@@ -47,9 +48,127 @@
     font-size: 1rem;
 }
 
+.control-container {
+  background-color: white;
+  border-radius: 5px;
+  box-shadow: 0 0 8px #888;
+  font-size: 12px;
+  font-weight: normal;
+  position: absolute;
+  left: 100px;
+  top: 80px;
+  max-width: 300px;
+  z-index: 1;
+  opacity: 1;
+}
+
     /*.geouttag-close:hover,
     .geouttag-close:focus {
         color: black;
         text-decoration: none;
         cursor: pointer;
     }*/
+.custom-select {
+  position: relative;
+  width: max;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  /*padding: 0.25rem 0.75rem; /* reduce vertical padding */
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.4rem; /* match native select height */
+  box-sizing: border-box;
+}
+
+.selected-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 5px;
+}
+
+.selected-tag {
+  background: #e0e0e0;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+}
+
+.selected-tag::after {
+  content: "×";
+  margin-left: 5px;
+  cursor: pointer;
+}
+
+.custom-select .select-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  line-height: 1.5;
+  box-sizing: border-box;
+  cursor: pointer;
+  resize: none;
+}
+
+.custom-select-input {
+  text-align: left; /* Align text to the left */
+  padding-left: 10px; /* Add some padding to the left */
+  width: 100%; /* Ensure the input takes the full width of its container */
+}
+
+/* Edge, Chrome specific styles */
+.custom-select .custom-select-input {
+  text-indent: 4px; /* Adjust the text indent to align with the select element */
+}
+
+/* Firefox specific styles */
+@-moz-document url-prefix() {
+  .custom-select .custom-select-input {
+    text-indent: 0px; /* Reset the text indent for Firefox */
+  }
+}
+
+
+
+/* Ensure placeholder and input text are rendered in black like native selects */
+.select-input::placeholder {
+  color: #000; /* Black by default */
+  opacity: 1; /* Ensure full opacity */
+}
+
+.select-input.disabled::placeholder {
+  color: #c0b8b8; /* Gray when input loses focus */
+}
+
+
+
+
+
+.options-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: white;
+  z-index: 1000;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.option {
+  padding: 8px;
+  cursor: pointer;
+}
+
+.option:hover {
+  background: #f0f0f0;
+}
+
+.option.selected {
+  background: #007bff;
+  color: white;
+}

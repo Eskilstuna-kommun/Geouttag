@@ -6,15 +6,14 @@
   "scripts": {
     "start": "npm-run-all --parallel watch-js watch-sass",
     "watch-js": "webpack-dev-server --config ./tasks/webpack.dev.js --mode development",
-    "watch-sass": "sass -w scss/geouttag.scss ../origo/plugins/geouttag/geouttag.css",
-    "prewatch-sass": "sass scss/geouttag.scss ../origo/plugins/geouttag/geouttag.css",
+    "watch-sass": "sass -w scss/geouttag.scss ../plugins/geouttag/geouttag.css",
+    "prewatch-sass": "sass scss/geouttag.scss ../plugins/geouttag/geouttag.css",
     "build": "webpack --config ./tasks/webpack.prod.js && npm run build-sass",
     "build-sass": "sass scss/geouttag.scss build/css/geouttag.css"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "ol": "^10.2.1",
     "npm-run-all2": "^8.0.4"
   },
   "devDependencies": {

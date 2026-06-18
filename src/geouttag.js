@@ -1,329 +1,484 @@
 /* eslint-disable no-console */
 import 'Origo';
 import loadSVGs from './loadresources';
+import GeouttagDrawHandler from './drawhandler';
+import styles from './styles';
 
 const Draw = Origo.ol.interaction.Draw;
-const createBox = Origo.ol.interaction.Draw.createBox;
+// const createBox = Origo.ol.interaction.Draw.createBox;
+const { createRegularPolygon, createBox } = Origo.ol.interaction.Draw;
 const VectorSource = Origo.ol.source.Vector;
-const { Style, Fill, Stroke, Text } = Origo.ol.style;
+const VectorLayer = Origo.ol.layer.Vector;
+const { Style } = Origo.ol.style;
 
 /* Geouttag is a tool to request FME server to
      export data from a marked area in map */
 const Geouttag = function Geouttag(options = {}) {
   const {
     url = '',
-    contactMail = '',
-    filePath = '',
-    infoLink = '',
-    logo = '',
     warningLimit,
-    warningTooltip = 'varning',
-    warningText = 'varning',
     errorLimit,
-    errorTooltip = 'error',
-    errorText = 'error',
-    infoText = '',
     predefinedExports = [],
-    maplayerExport = {}
+    maplayerExport = {},
+    drawlayerTitle = ''
 
   } = options;
 
   let viewer;
-  let measureStyleOptions;
   let map;
-  let projectionCode;
   let geouttag;
   let x1; let y1; let x2; let y2;
   let exportBtn;
-  let layerTypeSelect;
+  let productSelect;
   let fileTypeSelect;
-  let mapExports;
-  let allExports;
   let isActive = false;
   let geouttagButton;
+  let controlContainer;
+  let drawToolbarComp;
+  let polygonSelectionButton;
+  let rectangleSelectionButton;
+  let squareSelectionButton;
+  let headerComp;
+  let productSelectorTextComp;
+  let additionalLayersTextComp;
+  let formatSelectorTextComp;
+  let drawToolSelectorTextComp;
+  let customSelect;
+  let customSelectOptionsDropdown;
+  let customSelectSelectedOptions;
+  let customSelectInput;
+  let mapLayerOptionElements = [];
+  let selectedValues = [];
+  let geouttagLayer;
+  let currentDrawType = 'Polygon';
+  let coords;
+  let drawHandler;
   const restrictedLayers = [];
 
   loadSVGs();
 
-  /* returns html string of modal content */
-  function modalContent(xMin, yMin, xMax, yMax) {
-    const modalhtml = `<form id="ModalForm" onsubmit="return false;">
-            <div>
-                <label for="layer">
-                    <span class="label">Välj lager: </span>
-                    ${layerTypeSelect.render()}
-                </label>
-            </div>
-            <div>
-                <label for="layer">
-                    <span class="label">Välj filtyp: </span>
-                    ${fileTypeSelect.render()}
-                    </select>
-                </label>
-            </div>
-            <div class="geouttag-positionblock">
-                <div class="flex">
-                    <label for="X1">
-                        <span class="label">X1: </span>
-                        <input type="text" id="X1" name="X1" value=${xMin}>
-                    </label>
-                    <label for="Y1">
-                        <span class="label">Y1: </span>
-                        <input type="text" id="Y1" name="Y1" value=${yMin}>
-                    </label>
-                </div>
-                <br>
-                <div class="flex">
-                    <label for="X2">
-                        <span class="label">X2: </span>
-                        <input type="text" id="X2" name="X2" value=${xMax}>
-                    </label>
-                    <label for="Y2">
-                        <span class="label">Y2: </span>
-                        <input type="text" id="Y2" name="Y2" value=${yMax}>
-                    </label>
-                </div>
-            </div>
-            <div>
-                <label for="email">
-                    <span class="label">Epost: </span>
-                    <input type="email" id="email" name="email" style="width: 300px; margin: 1rem; padding: 0.2rem; background-color: white;" placeholder="Skriv epostaddress här">
-                </label>
-            </div>
-            <div>
-                <p style="font-family: Arial;max-width: 37em;">
-                    <font size="2">
-                        ${infoText}
-                        <br>
-                        <br>
-                        <a href="${infoLink}" target="_blank">
-                            <b>Klicka här för instruktion och mer information.</b>
-                        </a>
-                    </font>
-                </p>
-            </div>
-            <div>
-                ${exportBtn.render()}
-                <span title="${errorTooltip}" id="geouttag-red-warning" class="geouttag-red-warning">
-                    ${errorText}
-                </span>
-                <span title="${warningTooltip}" id="geouttag-yellow-warning" class="geouttag-yellow-warning">
-                    ${warningText}
-                    </span>
-                <img src="${logo}" align="right" style="width:auto;">
-            </div>
-        </form>
-        <div id="ModalStatus" style="display: none;max-width: 37em;">
-            <h3>Vi har tagit emot din beställning</h3>
-            <br>
-            <br>
-           Ditt geouttag kommer att levereras till din mail samt att du kan hämta den manuellt från ${filePath}
-            <br>
-            <br>
-            <font size="2">
-                <i>Tänk på att du bara får använda ditt geouttag inom ramen för ditt arbete. 
-                    Du får inte sprida eller sälja informationen vidare, undantaget externa konsulter som utför arbete åt kommunen.
-                    Har du frågor, kontakta <a href="mailto:${contactMail}?Subject=Geouttag" target="_top">${contactMail}</a>
-                </i>
-            </font>
-            <br>
-            <br>
-            <br>
+  /* State for the export button, if it should be enabled or disabled */
+  function updateExportButtonState() {
+    const exportBtnElement = document.getElementById(exportBtn.getId());
+    const productSelectElement = document.getElementById(productSelect.getId());
+    const fileTypeSelectElement = document.getElementById(fileTypeSelect.getId());
 
-        </div>`;
-
-    return modalhtml;
+    const hasProductSelection = productSelectElement.value;
+    const hasMapLayerSelection = selectedValues.length > 0;
+    const hasFileTypeSelection = !fileTypeSelectElement.disabled
+      && fileTypeSelectElement.options.length > 0
+      && !!fileTypeSelectElement.value;
+    const hasOkArea = geouttagLayer.getSource().getFeatures()[0]?.getGeometry().getArea() < warningLimit;
+    const exportReady = (hasProductSelection || hasMapLayerSelection) && hasFileTypeSelection && hasOkArea;
+    exportBtnElement.disabled = !exportReady;
   }
 
-  /* Apply some restrictions on layers */
-  function restrictExport(selValue) {
-    let area = (x2 - x1) * (y2 - y1);
-    area = area < 0 ? -area : area;
-
-    if (restrictedLayers.includes(selValue)) {
-      if (area > errorLimit) {
-        document.getElementById('geouttag-red-warning').style.display = 'inline';
-        document.getElementById(exportBtn.getId()).disabled = true;
-      } else if (area > warningLimit) {
-        document.getElementById('geouttag-yellow-warning').style.display = 'inline';
-      }
-    } else {
-      document.getElementById(exportBtn.getId()).disabled = false;
-      document.getElementById('geouttag-yellow-warning').style.display = 'none';
-      document.getElementById('geouttag-red-warning').style.display = 'none';
-    }
-  }
-
-  /* Shows available filetype in dropdown for selected layer */
-  function addFiletypes(selValue) {
-    const currFiletypes = allExports.find((layer) => layer.name === selValue.name).filetypes;
+  /* Shows available filetype in dropdown for selected layer/product
+  suitable handler function for listeners on productSelect and maplayer(custom)Select */
+  function setFiletypes({ selValue, mapLayerOutputFormats }) {
+    let currFiletypes;
+    if (selValue && (selValue !== 'defaultSelectionValue')) {
+      currFiletypes = predefinedExports.find((product) => product.name === selValue).filetypes;
+    } else if (mapLayerOutputFormats?.length > 0) currFiletypes = maplayerExport.filetypes;
+    else currFiletypes = [];
     let optionsHtml = '';
     currFiletypes.forEach((filetype) => {
       optionsHtml += `<option value="${filetype.title}">${filetype.title}</option>`;
     });
-    document.getElementById(fileTypeSelect.getId()).innerHTML = optionsHtml;
+    const filetypeSelectElement = document.getElementById(fileTypeSelect.getId());
+    filetypeSelectElement.innerHTML = optionsHtml;
+    if ((filetypeSelectElement.options.length > 0) && (filetypeSelectElement.disabled)) filetypeSelectElement.disabled = false;
+    else if ((filetypeSelectElement.options.length === 0) && (filetypeSelectElement.disabled === false)) filetypeSelectElement.disabled = true;
   }
 
-  /* Get available layers to select in dropdown */
-  function getOptions({ mapLayers, predefined }) {
-    if (mapLayers) {
-      mapExports = mapLayers.map((layer) => ({
-        name: layer.get('name'),
-        title: layer.get('title'),
-        sourceUrl: layer.get('source').urls[0],
-        filetypes: maplayerExport.filetypes
-      }));
+  function getMaplayerOptions({ mapLayers, predefined }) {
+    const theLayers = mapLayers?.length > 0 ? mapLayers : predefined;
+    return theLayers.map((layer) => {
+      const layerOptionElement = Origo.ui.Element({
+        tagName: 'div',
+        cls: 'option',
+        innerHTML: layer.get('title'),
+        attributes: {
+          data: {
+            title: layer.get('title'),
+            name: layer.get('name')
+          }
+        }
+      });
+      return layerOptionElement;
+    });
+  }
 
-      allExports = predefined.concat(mapExports);
-    } else allExports = predefined;
+  function filterCustomOptions(filterText) {
+    const text = (filterText || '').trim().toLowerCase();
+    const customSelectOptions = customSelectOptionsDropdown.getComponents().map(c => document.getElementById(c.getId()));
+    customSelectOptions.forEach((optEl) => {
+      if (!optEl) return;
+      const title = (optEl.getAttribute('data-title') || optEl.textContent || '').toLowerCase();
+      const optionsElement = optEl;
+      if (!text || title.indexOf(text) !== -1) {
+        optionsElement.style.display = 'block';
+      } else {
+        optionsElement.style.display = 'none';
+      }
+    });
+  }
 
+  function getSelectOptionsHtml({ selectOptions, defaultNothing }) {
+    if (defaultNothing) selectOptions.unshift(defaultNothing);
     let html = '';
-    allExports.forEach((layer) => {
-      html += `<option value="${layer.name}">${layer.title}</option>`;
+    selectOptions.forEach((sOption) => {
+      html += `<option value="${sOption.name}">${sOption.title}</option>`;
     });
     return html;
   }
 
-  function validateData(n) {
-    return !(n.length < 1);
-  }
-
-  function validateEmail(email) {
-    const re = /^(([^<>()\]\\.,;:\s@"]+(\.[^<>()\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
-    return re.test(email);
-  }
-
-  function setCookie(cname, cvalue, exdays) {
-    const d = new Date();
-    d.setTime(d.getTime() + (exdays * 24 * 60 * 60 * 1000));
-    const expires = `expires=${d.toUTCString()}`;
-    document.cookie = `${cname}=${cvalue};${expires};path=/`;
-  }
-
   /* Collect data from elements and send request to server */
   function sendData() {
-    const x1Elem = document.getElementById('X1');
-    const x2Elem = document.getElementById('X2');
-    const y1Elem = document.getElementById('Y1');
-    const y2Elem = document.getElementById('Y2');
-    const emailElem = document.getElementById('email');
-    let incorrectInput = false;
+    const productSelectElement = document.getElementById(productSelect.getId());
+    const fileTypeSelectElement = document.getElementById(fileTypeSelect.getId());
 
-    /* check if every text field is filled out correctly */
-    [x1Elem, x2Elem, y1Elem, y2Elem].forEach((elem) => {
-      const element = elem;
-      if (!validateData(elem.value)) {
-        element.style.backgroundColor = 'yellow';
-        incorrectInput = true;
-        return;
-      }
-      element.style.backgroundColor = 'white';
-    });
+    const selectedExportName = productSelectElement.value;
+    const isMapLayerExport = selectedExportName && selectedValues.length > 0;
+    const selectedExport = isMapLayerExport
+      ? maplayerExport
+      : predefinedExports.find((layer) => layer.name === selectedExportName);
 
-    if (!validateEmail(emailElem.value)) {
-      emailElem.style.backgroundColor = 'yellow';
-      incorrectInput = true;
-    } else {
-      emailElem.style.backgroundColor = 'white';
-    }
-
-    /* If any field were filled out incorrect then dont continue */
-    if (incorrectInput) return;
-
-    setCookie('email', emailElem.value, 365);
-
-    /* Get the FME workspace name, title of the export option and title of filetype
-      from the layers array via the selected options */
-    const selectedExportName = document.getElementById(layerTypeSelect.getId()).value;
-    const selectedExport = allExports.find((layer) => layer.name === selectedExportName);
-
-    const fileTypeName = document.getElementById(fileTypeSelect.getId()).value;
-    const fileTypeObj = selectedExport.filetypes.find((filetype) => fileTypeName === filetype.title);
+    const fileTypeName = fileTypeSelectElement.value;
+    const availableFiletypes = selectedExport.filetypes || [];
+    const fileTypeObj = availableFiletypes.find((filetype) => fileTypeName === filetype.title);
 
     const FMEscript = fileTypeObj.workspace || maplayerExport.workspace;
     const fileType = fileTypeObj.outputFormat;
-    const layerType = selectedExport.name;
+    const layerType = selectedExport.name || selectedExportName;
+
+    const selectedLayerNames = isMapLayerExport ? selectedValues : [layerType];
+    const productNameParams = selectedLayerNames
+      .map((name) => `&productName=${encodeURIComponent(name)}`)
+      .join('');
+
+    const displayProductNames = selectedLayerNames.join(', ');
 
     const d = new Date();
     let requestUrl = `${url}/${FMEscript}?geom=POLYGON `;
-    requestUrl += `((${x1Elem.value} ${y1Elem.value},${x1Elem.value} ${y2Elem.value},${x2Elem.value} ${y2Elem.value},${x2Elem.value} ${y1Elem.value}))`;
-    requestUrl
-      += `&srs=EPSG:3010&productName=${layerType}`
-      + `&email=${emailElem.value}`
-      + `&id=${d.getTime()}`
-      + `${fileType ? `&outputFormat=${fileType}` : ''}` // if there's an outputFormat prop of the fileType then relay it to FME Flow
-      + '&opt_servicemode=async';
 
-    document.getElementById('ModalForm').style.display = 'none';
-    document.getElementById('ModalStatus').style.display = 'block';
-
-    fetch(requestUrl).catch((e) => console.log(e));
-
-    console.log('REQ: ', requestUrl);
-  }
-
-  function getCookie(cname) {
-    const name = `${cname}=`;
-    const ca = document.cookie.split(';');
-    for (let i = 0; i < ca.length; i += 1) {
-      let c = ca[i];
-      while (c.charAt(0) === ' ') {
-        c = c.substring(1);
-      }
-      if (c.indexOf(name) === 0) {
-        return c.substring(name.length, c.length);
-      }
+    // Check if polygon coordinates
+    if (coords && currentDrawType === 'Polygon') {
+      // Use actual polygon coordinates
+      const coordinateString = coords
+        .map(coord => `${coord[0]} ${coord[1]}`)
+        .join(',');
+      requestUrl += `((${coordinateString}))`;
+    } else if (x1 !== undefined && y1 !== undefined && x2 !== undefined && y2 !== undefined) {
+      // Use bounding box for other tools
+      requestUrl += `((${x1} ${y1},${x1} ${y2},${x2} ${y2},${x2} ${y1},${x1} ${y1}))`;
+    } else {
+      console.error('No coordinates available for export');
+      return;
     }
-    return '';
+
+    requestUrl
+      += `&srs=EPSG:3010${productNameParams}`
+        + '&outputFilename='
+        + `&outputFormat=${fileType}`
+        + '&token=7732ad7a4a12634f5784a8188e633f0c79a95170'
+        + `&id=${d.getTime()}`;
+
+    // Open a new window with spinner, then load the export
+    const exportWindow = window.open('', '_blank');
+
+    if (!exportWindow) {
+      console.error('Popup blocked! Please allow popups for this site.');
+      alert('Kunde inte öppna exportfönstret. Kontrollera att popup-blockerare är avstängd för denna sida.');
+      return;
+    }
+
+    // Create HTML content with spinner
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html lang="sv">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Exporterar data...</title>
+          <style>
+            * {
+              margin: 0;
+              padding: 0;
+              box-sizing: border-box;
+            }
+
+            body {
+              width: 100vw;
+              height: 100vh;
+              display: flex;
+              flex-direction: column;
+              justify-content: center;
+              align-items: center;
+              background-color: rgba(255, 255, 255, 0.95);
+              font-family: Arial, sans-serif;
+              overflow: hidden;
+            }
+
+            .spinner {
+              border: 4px solid #f3f3f3;
+              border-top: 4px solid #3498db;
+              border-radius: 50%;
+              width: 60px;
+              height: 60px;
+              animation: spin 1s linear infinite;
+              margin-bottom: 20px;
+            }
+
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+
+            .message {
+              font-size: 18px;
+              color: #333;
+              text-align: center;
+              padding: 0 20px;
+            }
+
+            .iframe-container {
+              position: fixed;
+              top: 0;
+              left: 0;
+              width: 100%;
+              height: 100%;
+              display: none;
+            }
+
+            .iframe-container iframe {
+              width: 100%;
+              height: 100%;
+              border: none;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="spinner"></div>
+          <p class="message">Väntar på export av <strong>${displayProductNames}</strong> från FME Flow...<br><br>Låt fönstret vara öppet och vänta tills exporten är klar.<br><br>Om du stänger fönstret innan exporten är klar måste du starta om exporten.</p>
+
+          <div class="iframe-container" id="iframe-container">
+            <iframe id="export-iframe" src="${requestUrl}" title="Export"></iframe>
+          </div>
+
+          <script>
+            // Hide spinner and show iframe when it loads
+            const iframe = document.getElementById('export-iframe');
+            const container = document.getElementById('iframe-container');
+            const spinner = document.querySelector('.spinner');
+            const message = document.querySelector('.message');
+
+            iframe.addEventListener('load', function() {
+              spinner.style.display = 'none';
+              message.style.display = 'none';
+              container.style.display = 'block';
+            });
+
+            // Fallback: if iframe doesn't load within 30 seconds, show error
+            setTimeout(function() {
+              if (container.style.display !== 'block') {
+                message.innerHTML = 'Exporten av <strong>${displayProductNames}</strong> tar lite tid...<br><br>Låt fönstret vara öppet och vänta tills exporten är klar.<br><br>Om du stänger fönstret innan exporten är klar måste du starta om exporten.';
+                message.style.color = 'none';
+              }
+            }, 30000);
+          </script>
+        </body>
+      </html>
+    `;
+
+    // Write HTML to the new window using modern approach with Blob
+    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+    const blobUrl = URL.createObjectURL(blob);
+    exportWindow.location.href = blobUrl;
   }
 
   /* Updates extent coordinates of rectangle */
   function pointerMoveHandler(e) {
     const feature = e.feature;
-    const coords = feature.getGeometry().getCoordinates()[0];
-    // Extract all x and y values
-    const xValues = coords.map(c => c[0]);
-    const yValues = coords.map(c => c[1]);
-    // Calculate min and max
-    x1 = Math.round(Math.min(...xValues));
-    x2 = Math.round(Math.max(...xValues));
-    y1 = Math.round(Math.min(...yValues));
-    y2 = Math.round(Math.max(...yValues));
+    const geometry = feature.getGeometry();
+    const geometryType = geometry.getType();
+
+    if (geometryType === 'Polygon' && (currentDrawType === 'Polygon')) {
+      coords = geometry.getCoordinates()[0];
+
+      // Get bounding box from any geometry type
+      const extent = geometry.getExtent();
+      x1 = Math.round(extent[0]); // minX
+      y1 = Math.round(extent[1]); // minY
+      x2 = Math.round(extent[2]); // maxX
+      y2 = Math.round(extent[3]); // maxY
+
+      console.log(`Bounding box from ${geometry.getType()}: ${x1}, ${y1}, ${x2}, ${y2}`);
+    } else {
+      const extent = geometry.getExtent();
+      x1 = Math.round(extent[0]); // minX
+      y1 = Math.round(extent[1]); // minY
+      x2 = Math.round(extent[2]); // maxX
+      y2 = Math.round(extent[3]); // maxY
+
+      console.log(`Bounding box from ${geometry.getType()}: ${x1}, ${y1}, ${x2}, ${y2}`);
+
+      // Clear polygon coordinates since we're not using freehand
+      coords = null;
+    }
   }
 
-  /* Creates the draw interaction for the map */
-  function makeDrawInteraction() {
-    /* type Circle with a createBox() function defines a rectangle */
-    const geometryFunction = createBox();
-    const selectbox = new Draw({
-      source: new VectorSource(),
-      type: 'Circle',
-      geometryFunction
-    });
-    return selectbox;
+  function calculateStyle(feature, isSelected) {
+    const geometry = feature.getGeometry();
+
+    // 1. Handle the Point (the moving cursor/vertex during drawing)
+    if (geometry && geometry.getType() === 'Point') {
+      return [styles.standardInteractionStyle];
+    }
+
+    // 2. Handle the Polygon (the shape being drawn)
+    if (!geometry || geometry.getType() !== 'Polygon') {
+      return new Style({});
+    }
+
+    const area = Math.abs(geometry.getArea());
+
+    // Choose the base styling based on your business logic
+    const areaStyle = area > warningLimit ? styles.warningStyle : styles.standardInteractionStyle;
+
+    // 3. Combine styles:
+    // [defaultEditingStyle] provides the sketch-line feel
+    // [areaStyle] provides your specific logic
+    // [styles.unSelectedStyle] applies if not selected
+
+    if (isSelected) {
+      if (areaStyle === styles.standardInteractionStyle) {
+        return [styles.standardInteractionStyle];
+      }
+      return [areaStyle];
+    } else if (areaStyle === styles.standardInteractionStyle) {
+      return [styles.standardInteractionStyle, styles.extraStrokeStyle];
+    }
+    return [areaStyle, styles.extraStrokeStyle];
   }
 
-  // default style for the rectangle
-  function createStyle() {
-    return new Style({
-      fill: new Fill({
-        color: 'rgba(255, 255, 255, 0.4)'
-      }),
-      stroke: new Stroke({
-        color: '#ffcc33',
-        width: 2
-      }),
-      text: new Text({
-        text: 'Area att exportera',
-        font: '14px Calibri,sans-serif',
-        fill: new Fill({ color: '#000' }),
-        stroke: new Stroke({ color: '#fff', width: 3 }),
-        offsetY: -10
-      })
+  function selectedStyleFunction(feature) { // the decision on what style bits to employ looks different for the finished feature (select can also influense, why else have a select)
+    return calculateStyle(feature, true);
+  }
+  function styleFunction(feature) {
+    return calculateStyle(feature, false);
+  }
+
+  /* Creates different draw interactions based on tool type */
+  function makeDrawInteraction(toolType = 'Polygon') {
+    let layer;
+
+    if (!geouttagLayer) {
+      layer = new VectorLayer({
+        source: new VectorSource(),
+        title: drawlayerTitle || 'Urvalsyta!',
+        type: 'GEOJSON',
+        drawlayer: true,
+        zIndex: 7,
+        group: 'root',
+        style: styleFunction
+      });
+      map.addLayer(layer);
+
+      geouttagLayer = layer;
+      drawHandler.setGeouttagLayer(geouttagLayer);
+    } else {
+      layer = geouttagLayer;
+      layer.getSource().clear();
+    }
+
+    let drawInteraction;
+
+    switch (toolType) {
+      case 'box':
+        drawInteraction = new Draw({
+          source: layer.getSource(),
+          type: 'Circle',
+          style: selectedStyleFunction,
+          geometryFunction: createBox()
+        });
+        break;
+
+      case 'squareButton':
+        drawInteraction = new Draw({
+          source: layer.getSource(),
+          type: 'Circle',
+          geometryFunction: createRegularPolygon(4),
+          style: selectedStyleFunction
+        });
+        break;
+
+      case 'Polygon':
+      default:
+        drawInteraction = new Draw({
+          source: layer.getSource(),
+          type: 'Polygon',
+          style: selectedStyleFunction
+        });
+        break;
+    }
+
+    drawHandler.setGeouttagInteraction(drawInteraction);
+    drawInteraction.on('drawstart', drawHandler.onDrawStart);
+
+    drawInteraction.on('drawend', (evt) => {
+      drawHandler.onDrawEnd(evt);
+      updateExportButtonState();
+      setTimeout(updateExportButtonState, 0); // "on next tick" för att featuren finns inte i sourcen annars
+      pointerMoveHandler(evt);
     });
+
+    return drawInteraction;
+  }
+
+  // Function to change draw tool
+  function changeDrawTool(toolType) {
+    currentDrawType = toolType;
+
+    // Only change the interaction if geouttag is currently active
+    if (isActive && geouttag) {
+      // Remove current interaction
+      map.removeInteraction(geouttag);
+      // Clear any existing features so export state sees no selection
+      try {
+        if (geouttagLayer && geouttagLayer.getSource) {
+          const src = geouttagLayer.getSource();
+          if (src && typeof src.clear === 'function') src.clear();
+        }
+      } catch (err) {
+        console.warn('Could not clear geouttagLayer source:', err);
+      }
+
+      updateExportButtonState();
+
+      // Create new interaction with selected tool (event handlers attached automatically)
+      geouttag = makeDrawInteraction(toolType);
+
+      // Add interaction to map
+      map.addInteraction(geouttag);
+    } else {
+      console.log('Tool selected but interaction not active. Will be used when activated.');
+    }
+  }
+
+  function removeGeouttag() {
+    document.getElementById(controlContainer.getId()).classList.add('o-hidden');
+    geouttagLayer.getSource().clear();
   }
 
   function toggleGeouttag() {
+    const controlContainerElement = document.getElementById(controlContainer.getId());
+    if (controlContainerElement.classList.contains('o-hidden')) {
+      controlContainerElement.classList.remove('o-hidden');
+    } else {
+      removeGeouttag();
+    }
+
     const detail = {
       name: 'geouttag',
       active: !isActive
@@ -333,6 +488,30 @@ const Geouttag = function Geouttag(options = {}) {
 
   function setActive(state) {
     isActive = state;
+  }
+
+  function drawToolButtonEvents() {
+    const polygonBtnElement = document.getElementById(polygonSelectionButton.getId());
+    const squareBtnElement = document.getElementById(squareSelectionButton.getId());
+    const rectangleBtnElement = document.getElementById(rectangleSelectionButton.getId());
+
+    if (polygonBtnElement && !polygonBtnElement.dataset.listenerAttached) {
+      polygonBtnElement.addEventListener('click', () => {
+        changeDrawTool('Polygon');
+      });
+    }
+
+    if (squareBtnElement && !squareBtnElement.dataset.listenerAttached) {
+      squareBtnElement.addEventListener('click', () => {
+        changeDrawTool('squareButton');
+      });
+    }
+
+    if (rectangleBtnElement && !rectangleBtnElement.dataset.listenerAttached) {
+      rectangleBtnElement.addEventListener('click', () => {
+        changeDrawTool('box');
+      });
+    }
   }
 
   function enableInteraction() {
@@ -354,40 +533,52 @@ const Geouttag = function Geouttag(options = {}) {
     onAdd(evt) {
       viewer = evt.target;
       map = viewer.getMap();
-      projectionCode = map.getView().getProjection();
+
+      drawHandler = GeouttagDrawHandler({
+        stylewindow: null,
+        pointerMoveHandler,
+        Origo,
+        warningLimit,
+        errorLimit,
+        updateExportButtonState,
+        selectedStyleFunction,
+        styleFunction
+      });
+
+      drawHandler.initializeMap(map);
+
+      // projectionCode = map.getView().getProjection();
+      const mapLayers = Object.keys(maplayerExport).length ? viewer.getLayers().filter((layer) => layer.get('geouttag')) : [];
+
+      try {
+        const customSelectLayerOptions = getMaplayerOptions({
+          mapLayers
+        });
+
+        customSelectOptionsDropdown.addComponents(customSelectLayerOptions);
+      } catch (e) {
+        console.warn('Could not create/attach mapLayerSelect now:', e);
+      }
+      if (predefinedExports) {
+        predefinedExports.forEach((layer) => {
+          if (layer.restricted) {
+            restrictedLayers.push(layer);
+          }
+        });
+      }
+      // if another click interaction like draw is activated, the geouttag tool button should become inactive and its control panel should vanish
+      // so should its painted feature
+      viewer.on('toggleClickInteraction', (e) => {
+        if ((e.name !== 'geouttag') && (e.active)) {
+          if (isActive) {
+            removeGeouttag();
+          }
+        }
+      });
+
       geouttag = makeDrawInteraction();
 
-      geouttag.on('drawstart', (e) => {
-        const feature = e.feature;
-        feature.setStyle(createStyle());
-      });
-
-      // drawend is the only relevant event for the rectangle coordinates for the modal
-      geouttag.on('drawend', (e) => {
-        pointerMoveHandler(e);
-        console.log(`this would be the modalContent: ${modalContent(x1, y1, x2, y2)}`);
-
-        Origo.ui.Modal({
-          title: 'Välj det lager du vill exportera från vald area',
-          content: `${modalContent(x1, y1, x2, y2)}`,
-          target: viewer.getMain().getId(),
-          cls: 'geouttag-modal'
-        });
-        document.getElementById('email').value = (getCookie('email'));
-        const layerTypeSelectElement = document.getElementById(layerTypeSelect.getId());
-        layerTypeSelectElement.addEventListener('change', () => {
-          const selectedLayer = allExports.find((layer) => layer.name === layerTypeSelectElement.value);
-          addFiletypes(selectedLayer);
-          restrictExport(selectedLayer);
-        });
-        if (allExports.length) {
-          addFiletypes(allExports[0]);
-        } else console.warn('No exports defined, check your configuration.');
-        const exportBtnElement = document.getElementById(exportBtn.getId());
-        exportBtnElement.addEventListener('click', () => {
-          sendData();
-        });
-      });
+      drawToolButtonEvents();
 
       viewer.on('toggleClickInteraction', (detail) => {
         if (detail.name === 'geouttag' && detail.active) {
@@ -397,6 +588,167 @@ const Geouttag = function Geouttag(options = {}) {
         }
       });
 
+      this.addComponents([geouttagButton]);
+      this.render();
+
+      document.getElementById(fileTypeSelect.getId()).disabled = true;
+
+      // These three handlers work together to ensure users can only export when they've
+      // made valid selections, and to enforce the rule that users must choose either a predefined product OR map layers, but not both.
+
+      const productSelectElement = document.getElementById(productSelect.getId());
+      productSelectElement.addEventListener('change', (productSelectEvent) => {
+        const selectedValue = productSelectEvent.target.value;
+        const customSelectEl = document.getElementById(customSelectInput.getId());
+        if (selectedValue !== 'defaultSelectionValue') {
+          setFiletypes({ selValue: selectedValue });
+          customSelectEl.disabled = true;
+          customSelectEl.classList.add('disabled');
+        } else {
+          customSelectEl.disabled = false;
+          customSelectEl.classList.remove('disabled');
+          setFiletypes({ mapLayerOutputFormats: [] });
+        }
+        updateExportButtonState();
+      });
+
+      const fileTypeSelectElement = document.getElementById(fileTypeSelect.getId());
+      fileTypeSelectElement.addEventListener('change', () => {
+        updateExportButtonState();
+      });
+
+      const exportBtnElement = document.getElementById(exportBtn.getId());
+      if (exportBtnElement && !exportBtnElement.dataset.listenerAttached) {
+        exportBtnElement.addEventListener('click', () => {
+          sendData();
+        });
+        exportBtnElement.dataset.listenerAttached = 'true';
+      }
+
+      document.getElementById(customSelectInput.getId()).addEventListener('click', () => {
+        const optionsDropdownEl = document.getElementById(customSelectOptionsDropdown.getId());
+        const inputEl = document.getElementById(customSelectInput.getId());
+        if (!optionsDropdownEl || !inputEl) return;
+        const rect = inputEl.getBoundingClientRect();
+        if (optionsDropdownEl.style.display === 'block') {
+          optionsDropdownEl.style.display = 'none';
+          const customSelectEl = document.getElementById(customSelect.getId());
+          if (customSelectEl && customSelectEl.contains(optionsDropdownEl) === false) {
+            customSelectEl.appendChild(optionsDropdownEl);
+          }
+        } else {
+          optionsDropdownEl.style.position = 'absolute';
+          optionsDropdownEl.style.left = `${rect.left + window.scrollX}px`;
+          optionsDropdownEl.style.top = `${rect.bottom + window.scrollY}px`;
+          optionsDropdownEl.style.maxWidth = `${rect.width}px`;
+          optionsDropdownEl.style.zIndex = '10000';
+          optionsDropdownEl.style.display = 'block';
+          document.body.appendChild(optionsDropdownEl);
+        }
+      });
+
+      document.getElementById(customSelectInput.getId()).addEventListener('input', (e) => {
+        const optionsDropdownEl = document.getElementById(customSelectOptionsDropdown.getId());
+        const inputEl = document.getElementById(customSelectInput.getId());
+        if (!optionsDropdownEl || !inputEl) return;
+        const rect = inputEl.getBoundingClientRect();
+        if (optionsDropdownEl.style.display !== 'block') {
+          optionsDropdownEl.style.position = 'absolute';
+          optionsDropdownEl.style.left = `${rect.left + window.scrollX}px`;
+          optionsDropdownEl.style.top = `${rect.bottom + window.scrollY}px`;
+          optionsDropdownEl.style.maxWidth = `${rect.width}px`;
+          optionsDropdownEl.style.zIndex = '10000';
+          optionsDropdownEl.style.display = 'block';
+          document.body.appendChild(optionsDropdownEl);
+        }
+        filterCustomOptions(e.target.value);
+      });
+
+      mapLayerOptionElements = customSelectOptionsDropdown.getComponents().map((component) => document.getElementById(component.getId()));
+      const mapLayerOptions = mapLayerOptionElements;
+
+      // eventlisteners behövs för varje option samt dess tagg
+      mapLayerOptions.forEach(mapLayerOption => {
+        mapLayerOption.addEventListener('click', () => {
+          const layerName = mapLayerOption.getAttribute('data-name');
+          const layerTitle = mapLayerOption.getAttribute('data-title');
+
+          const isSelected = mapLayerOption.classList.toggle('selected');
+          const selectedOptions = document.getElementById(customSelectSelectedOptions.getId());
+          const productSelectElem = document.getElementById(productSelect.getId());
+
+          if (isSelected) {
+            productSelectElem.disabled = true;
+            selectedValues.push(layerName);
+            const tag = document.createElement('div');
+            tag.className = 'selected-tag';
+            tag.textContent = layerTitle;
+            // vald-lager-brickorna behöver eventlisterners för ta bort och ta bort resp lagers markering
+            tag.addEventListener('click', (closeTagClickEvent) => {
+              closeTagClickEvent.stopPropagation();
+              mapLayerOption.classList.remove('selected');
+              selectedValues = selectedValues.filter(v => v !== layerName);
+              if (selectedValues.length === 0) {
+                productSelectElem.disabled = false;
+                setFiletypes({ mapLayerOutputFormats: [] });
+              }
+              tag.remove();
+            });
+            selectedOptions.append(tag);
+          } else {
+            selectedValues = selectedValues.filter(v => v !== layerName);
+            if (selectedValues.length === 0) {
+              productSelectElem.disabled = false;
+              setFiletypes({ mapLayerOutputFormats: [] });
+            }
+            const tags = selectedOptions.querySelectorAll('.selected-tag');
+            tags.forEach(tag => {
+              if (tag.textContent.includes(layerTitle)) {
+                tag.remove();
+              }
+            });
+          }
+          if (selectedValues.length > 0) setFiletypes({ mapLayerOutputFormats: maplayerExport.filetypes });
+          updateExportButtonState();
+        });
+      });
+
+      // eventlistener behövs för att ta bort rullgardin vid klick utanför i custom select
+      document.addEventListener('click', (forDropdownEvent) => {
+        const optionsEl = document.getElementById(customSelectOptionsDropdown.getId());
+        if (forDropdownEvent.target.closest('.custom-select') || (optionsEl?.contains(forDropdownEvent.target))) return;
+        if (optionsEl) optionsEl.style.display = 'none';
+      });
+    },
+
+    onInit() {
+      customSelectSelectedOptions = Origo.ui.Element({
+        tagName: 'div',
+        cls: 'selected-options'
+      });
+
+      customSelectInput = Origo.ui.Element({
+        tagName: 'input',
+        attributes: {
+          type: 'text',
+          placeholder: 'Välj kartlager..'
+          // allow typing to filter options
+        },
+        cls: 'select-input custom-select-input text-small'
+      });
+
+      customSelectOptionsDropdown = Origo.ui.Element({
+        tagName: 'div',
+        cls: 'options-dropdown',
+        style: 'display:none'
+      });
+
+      customSelect = Origo.ui.Element({
+        tagName: 'div',
+        cls: 'custom-select',
+        components: [customSelectOptionsDropdown, customSelectInput]
+      });
+
       geouttagButton = Origo.ui.Button({
         cls: 'padding-small margin-bottom-smaller icon-smaller round light box-shadow tooltip',
         click() {
@@ -404,52 +756,114 @@ const Geouttag = function Geouttag(options = {}) {
         },
         icon: '#geouttag_ic_download_24px',
         tooltipText: 'Geouttag',
-        tooltipPlacement: 'east'
+        tooltipPlacement: 'east'// ,
+        // state: 'disabled' - funkar
       });
 
       exportBtn = Origo.ui.Element({
         tagName: 'button',
         cls: 'export-btn light box-shadow',
-        style: 'margin-top: 1.3rem;',
+        style: 'margin-top: 1.3rem; width: 30%',
+        attributes: {
+          disabled: true
+        },
         innerHTML: 'Starta export'
       });
 
-      layerTypeSelect = Origo.ui.Element({
+      productSelect = Origo.ui.Element({
         tagName: 'select',
-        innerHTML: `${getOptions({
-          mapLayers: Object.keys(maplayerExport).length ? viewer.getLayers().filter((layer) => layer.get('geouttag')) : [],
-          predefined: predefinedExports || null
-        })}`
+        cls: 'text-small',
+        innerHTML: getSelectOptionsHtml({
+          selectOptions: predefinedExports,
+          defaultNothing: {
+            title: 'Välj en produkt..',
+            name: 'defaultSelectionValue'
+          }
+        })
       });
 
       fileTypeSelect = Origo.ui.Element({
         tagName: 'select'
       });
 
-      this.addComponents([geouttagButton]);
-      this.render();
-    },
-    onInit() {
-      if (predefinedExports) {
-        predefinedExports.forEach((layer) => {
-          if (layer.restricted) {
-            restrictedLayers.push(layer);
-          }
-        });
-      }
-    },
-    render() {
-      const filterDiv = Origo.ui.Element({
-        tagName: 'div',
-        cls: 'flex column',
-        style: {
-          position: 'relative'
-        }
+      headerComp = Origo.ui.Element({
+        tagName: 'h3',
+        innerHTML: 'GeoUttag',
+        style: 'text-align: center;'
       });
 
-      document.getElementById(viewer.getMain().getMapTools().getId()).appendChild(Origo.ui.dom.html(filterDiv.render()));
-      document.getElementById(filterDiv.getId()).appendChild(Origo.ui.dom.html(geouttagButton.render()));
+      productSelectorTextComp = Origo.ui.Element({
+        tagName: 'p',
+        innerHTML: 'Välj en produkt eller ett till flera lager i kartan',
+        cls: 'text-small padding-bottom-small padding-left-small'
+      });
 
+      additionalLayersTextComp = Origo.ui.Element({
+        tagName: 'p',
+        innerHTML: "Syns inte lagret du önskar, saknar du något?<br>Mejla <a href='mailto:gissupport@eskilstuna.se'>gissupport@eskilstuna.se",
+        cls: 'text-smaller padding-bottom-small padding-left-small'
+      });
+
+      formatSelectorTextComp = Origo.ui.Element({
+        tagName: 'p',
+        innerHTML: 'Välj ett exportformat',
+        cls: 'text-small padding-top-large padding-bottom-small padding-left-small'
+      });
+
+      drawToolSelectorTextComp = Origo.ui.Element({
+        tagName: 'p',
+        innerHTML: 'Välj ett verktyg för att rita önskat område att exportera',
+        cls: 'text-small padding-left-small',
+        style: 'padding-bottom: 0.4rem;'
+      });
+
+      polygonSelectionButton = Origo.ui.Button({
+        cls: 'light text-smaller padding-left-large',
+        style: 'flex: 1 1 auto;',
+        text: 'polygon',
+        state: 'active'
+      });
+
+      squareSelectionButton = Origo.ui.Button({
+        cls: 'light text-smaller',
+        style: 'flex: 1 1 auto;',
+        text: 'kvadrat',
+        state: 'initial'
+      });
+
+      rectangleSelectionButton = Origo.ui.Button({
+        cls: 'light text-smaller padding-right-large',
+        style: 'flex: 1 1 auto;',
+        text: 'rektangel'
+      });
+
+      drawToolbarComp = Origo.ui.ToggleGroup({
+        cls: 'flex button-group divider-horizontal rounded-large bg-inverted box-shadow',
+        style: { height: 'fit-content', display: 'flex', width: '75%' }, // width: 75%;
+        components: [polygonSelectionButton, squareSelectionButton, rectangleSelectionButton]
+      });
+
+      controlContainer = Origo.ui.Element({
+        tagName: 'div',
+        cls: 'flex column control box bg-white overflow-hidden o-hidden',
+        style: {
+          left: '4rem',
+          top: '1rem',
+          padding: '0.5rem',
+          width: '25rem',
+          'z-index': '-1'
+        },
+        components: [headerComp, productSelectorTextComp, productSelect, customSelect, additionalLayersTextComp, customSelectSelectedOptions, formatSelectorTextComp, fileTypeSelect, drawToolSelectorTextComp, drawToolbarComp, exportBtn]
+      });
+
+      // Ensure controlContainer is registered as a child component so its
+      // `onRender` handlers are called when this component dispatches 'render'.
+      this.addComponent(controlContainer);
+    },
+    render() {
+      document.getElementById(viewer.getMain().getMapTools().getId()).append(Origo.ui.dom.html(geouttagButton.render())); // den enda komponenten som ska synas från start
+      document.getElementById(viewer.getMain().getId()).append(Origo.ui.dom.html(controlContainer.render()));
+      drawToolButtonEvents();
       this.dispatch('render');
     }
   });

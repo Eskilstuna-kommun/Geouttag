@@ -378,12 +378,12 @@ const Geouttag = function Geouttag(options = {}) {
     });
   }
 
-  /* Construct and open ArcGIS ImageServer download URL for raster export */
+  /* Construct and open ArcGIS ImageServer download URL for imageServer export */
   function sendArcGISRequest() {
-    // Only proceed if the selected product has raster: true
+    // Only proceed if the selected product has imageServer: true
     const productSelectElement = document.getElementById(productSelect.getId());
     const selectedProduct = predefinedExports.find((p) => p.name === productSelectElement?.value);
-    if (!selectedProduct || !selectedProduct.raster) {
+    if (!selectedProduct || !selectedProduct.imageServer) {
       return;
     }
 
@@ -391,7 +391,7 @@ const Geouttag = function Geouttag(options = {}) {
     const selectedFormat = fileTypeSelectElement.value;
 
     if (!selectedFormat) {
-      console.error('No format selected for ArcGIS raster download');
+      console.error('No format selected for ArcGIS imageServer download');
       return;
     }
 
@@ -409,9 +409,9 @@ const Geouttag = function Geouttag(options = {}) {
     const token = arcgisSession.access_token;
 
     // Build the base ImageServer download URL (use f=json to get individual file URLs)
-    const jsonUrl = `https://geo.eskilstuna.se/imageserver/rest/services/${selectedProduct.mapp}/${selectedProduct.name}/ImageServer/download?rasterIds=1&geometry=${geometry}&geometryType=esriGeometryEnvelope&format=${selectedFormat}&f=json&token=${token}`;
+    const jsonUrl = `https://geo.eskilstuna.se/imageserver/rest/services/${selectedProduct.name}/ImageServer/download?rasterIds=1&geometry=${geometry}&geometryType=esriGeometryEnvelope&format=${selectedFormat}&f=json&token=${token}`;
 
-    console.log('Fetching ArcGIS raster download URLs');
+    console.log('Fetching ArcGIS imageServer download URLs');
 
     fetch(jsonUrl)
       .then((response) => {
@@ -961,7 +961,7 @@ const Geouttag = function Geouttag(options = {}) {
       if (exportBtnElement && !exportBtnElement.dataset.listenerAttached) {
         exportBtnElement.addEventListener('click', async () => {
           const selectedProduct = predefinedExports.find((p) => p.name === productSelectElement?.value);
-          const isRaster = selectedProduct && selectedProduct.raster;
+          const isRaster = selectedProduct && selectedProduct.imageServer;
 
           if (isRaster) {
             // Raster product: authenticate if needed, then download via ArcGIS ImageServer
@@ -1077,24 +1077,12 @@ const Geouttag = function Geouttag(options = {}) {
 
       // Helper to toggle auth UI state
       function updateAuthUI(sessionInfo) {
-        // const signInEl = document.getElementById(signInBtn.getId());
-        const signOutEl = document.getElementById(signOutBtn.getId());
-        const userInfoEl = document.getElementById(userInfoComp.getId());
-
         if (!sessionInfo) {
           localStorage.removeItem('__ARCGIS_USER_SESSION__');
           arcgisSession = null;
-          userInfoEl.style.display = 'none';
-          userInfoEl.innerHTML = '';
-          signOutEl.style.display = 'none';
-          // signInEl.style.display = '';
         } else {
           arcgisSession = sessionInfo;
           localStorage.setItem('__ARCGIS_USER_SESSION__', JSON.stringify(sessionInfo));
-          userInfoEl.style.display = '';
-          userInfoEl.innerHTML = `Inloggad i ArcGIS Portal som: ${sessionInfo.username}. Krävs endast för export av raster.`;
-          signOutEl.style.display = '';
-          // signInEl.style.display = 'none';
         }
       }
 

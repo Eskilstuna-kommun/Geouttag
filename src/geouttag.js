@@ -1077,12 +1077,17 @@ const Geouttag = function Geouttag(options = {}) {
 
       // Helper to toggle auth UI state
       function updateAuthUI(sessionInfo) {
+        const userInfoEl = document.getElementById(userInfoComp.getId());
+
         if (!sessionInfo) {
           localStorage.removeItem('__ARCGIS_USER_SESSION__');
           arcgisSession = null;
+          userInfoEl.style.display = 'none';
+          userInfoEl.innerHTML = '';
         } else {
           arcgisSession = sessionInfo;
           localStorage.setItem('__ARCGIS_USER_SESSION__', JSON.stringify(sessionInfo));
+          userInfoEl.style.display = '';
         }
       }
 

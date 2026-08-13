@@ -99,7 +99,7 @@ The plugin can be loaded like this in an html-file:
 
           }
         ],
-        workspace: 'maplayers_wfs.fmw',
+        FMEWorkspace: 'maplayers_wfs.fmw',
         layers: [
             {
                 name: "sokvyx_intressepunkter_kff_ok_bibliotek",

@@ -153,7 +153,7 @@ const Geouttag = function Geouttag(options = {}) {
     const availableFiletypes = selectedExport.filetypes || [];
     const fileTypeObj = availableFiletypes.find((filetype) => fileTypeName === filetype.title);
 
-    const FMEscript = fileTypeObj.workspace || maplayerExport.workspace;
+    const FMEscript = fileTypeObj.workspace || maplayerExport.FMEWorkspace;
     const fileType = fileTypeObj.outputFormat;
     const layerType = selectedExport.name || selectedExportName;
 

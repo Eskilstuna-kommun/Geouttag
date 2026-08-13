@@ -554,7 +554,7 @@ const Geouttag = function Geouttag(options = {}) {
 
       // projectionCode = map.getView().getProjection();
 
-      const mapLayers = maplayerExport.layers || []
+      const mapLayers = maplayerExport?.layers || []
 
         try {
           const customSelectLayerOptions = getMaplayerOptions({

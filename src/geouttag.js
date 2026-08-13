@@ -739,7 +739,7 @@ const Geouttag = function Geouttag(options = {}) {
       customSelectInput = Origo.ui.Element({
         tagName: 'input',
         attributes: {
-          type: 'text', // nedan för att oninit kommer före onadd. Kanske kan en funktion som returnerar mapLayersExists grund som bool fungera
+          type: 'text',
           placeholder: getMapLayersExist() ? 'Välj kartlager..' : 'Inga tillgängliga kartlager',
           disabled: !(getMapLayersExist()),
           // allow typing to filter options

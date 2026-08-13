@@ -742,7 +742,6 @@ const Geouttag = function Geouttag(options = {}) {
           type: 'text',
           placeholder: getMapLayersExist() ? 'Välj kartlager..' : 'Inga tillgängliga kartlager',
           disabled: !(getMapLayersExist()),
-          // allow typing to filter options
         },
         cls: `select-input custom-select-input text-small ${(getMapLayersExist()) ? '' : 'disabled'}`
       });

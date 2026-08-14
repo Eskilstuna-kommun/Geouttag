@@ -1,4 +1,5 @@
 # Geouttag
+
 Geouttag plugin for Origo using FME server Web Services. The user may draw a rectangle over the area to be exported, as well as choose a list of predefined layers/data sources to export.
 
 (<i>Is compatible with Origo v2.9</i>)
@@ -7,19 +8,21 @@ Layers in the map meant to be exportable via this plugin can be indicated via a 
 These layers share a configuration, including export formats, possible via wfs for instance, as well as an FME Flow workspace.
 
 #### Example usage of Geouttag as plugin
+
 The plugin can be loaded like this in an html-file:
+
 ```html
-  <head>
-	...
-	<link href="plugins/geouttag.css" rel="stylesheet">
-	</head>
-	...
-  <script src="js/origo.min.js"></script>
-  <script src="plugins/geouttag.min.js"></script>
-  <script type="text/javascript">
+<head>
+  ...
+  <link href="plugins/geouttag.css" rel="stylesheet" />
+</head>
+...
+<script src="js/origo.min.js"></script>
+<script src="plugins/geouttag.min.js"></script>
+<script type="text/javascript">
       const origo = Origo('index.json');
       origo.on('load', function(viewer) {
-      
+
       const geouttag = Geouttag({
         url: "URL to FME",
         filePath: "any path where user can get the export",
@@ -59,7 +62,7 @@ The plugin can be loaded like this in an html-file:
                 workspace: 'cycling_cad.fmw'
               },
               {
-                title: 'Shape',,
+                title: 'Shape',
                 workspace: 'cycling_shape.fmw'
               }
             ],
@@ -96,11 +99,22 @@ The plugin can be loaded like this in an html-file:
 
           }
         ],
-        workspace: 'maplayers_wfs.fmw'
-      } 
-		});
+        FMEWorkspace: 'maplayers_wfs.fmw',
+        layers: [
+            {
+                name: "sokvyx_intressepunkter_kff_ok_bibliotek",
+                title: "Bibliotek",
+                workspace: "etuna"
+            },
+            {
+                name: "sokvyx_intressepunkter_utescen",
+                title: "Utescener",
+                workspace: "etuna"
+            }
+        ]
+      });
     viewer.addComponent(geouttag);
-                
+
     });
-        </script>
+</script>
 ```

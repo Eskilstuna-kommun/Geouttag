@@ -113,6 +113,11 @@ const Geouttag = function Geouttag(options = {}) {
 
   loadSVGs();
 
+  function getMapLayersExist() {
+    const mapLayersExist = maplayerExport && maplayerExport.layers && (maplayerExport.layers.length > 0);
+    return mapLayersExist;
+  }
+
   /* State for the export button, if it should be enabled or disabled */
   function updateExportButtonState() {
     const exportBtnElement = document.getElementById(exportBtn.getId());
@@ -147,17 +152,17 @@ const Geouttag = function Geouttag(options = {}) {
     else if ((filetypeSelectElement.options.length === 0) && (filetypeSelectElement.disabled === false)) filetypeSelectElement.disabled = true;
   }
 
-  function getMaplayerOptions({ mapLayers, predefined }) {
-    const theLayers = mapLayers?.length > 0 ? mapLayers : predefined;
-    return theLayers.map((layer) => {
+  function getMaplayerOptions({ layers }) {
+    return layers.map((layer) => {
       const layerOptionElement = Origo.ui.Element({
         tagName: 'div',
         cls: 'option',
-        innerHTML: layer.get('title'),
+        innerHTML: layer.title,
         attributes: {
           data: {
-            title: layer.get('title'),
-            name: layer.get('name')
+            title: layer.title,
+            name: layer.name,
+            workspace: layer.workspace
           }
         }
       });
@@ -204,7 +209,7 @@ const Geouttag = function Geouttag(options = {}) {
     const availableFiletypes = selectedExport.filetypes || [];
     const fileTypeObj = availableFiletypes.find((filetype) => fileTypeName === filetype.title);
 
-    const FMEscript = fileTypeObj.workspace || maplayerExport.workspace;
+    const FMEscript = fileTypeObj.workspace || maplayerExport.FMEWorkspace;
     const fileType = fileTypeObj.outputFormat;
     const layerType = selectedExport.name || selectedExportName;
 
@@ -875,17 +880,18 @@ const Geouttag = function Geouttag(options = {}) {
       drawHandler.initializeMap(map);
 
       // projectionCode = map.getView().getProjection();
-      const mapLayers = Object.keys(maplayerExport).length ? viewer.getLayers().filter((layer) => layer.get('geouttag')) : [];
+
+      const mapLayers = maplayerExport?.layers || [];
 
       try {
         const customSelectLayerOptions = getMaplayerOptions({
-          mapLayers
+          layers: mapLayers
         });
-
         customSelectOptionsDropdown.addComponents(customSelectLayerOptions);
       } catch (e) {
         console.warn('Could not create/attach mapLayerSelect now:', e);
       }
+
       if (predefinedExports) {
         predefinedExports.forEach((layer) => {
           if (layer.restricted) {
@@ -932,8 +938,10 @@ const Geouttag = function Geouttag(options = {}) {
           customSelectEl.disabled = true;
           customSelectEl.classList.add('disabled');
         } else {
-          customSelectEl.disabled = false;
-          customSelectEl.classList.remove('disabled');
+          if (getMapLayersExist()) {
+            customSelectEl.disabled = false;
+            customSelectEl.classList.remove('disabled');
+          }
           setFiletypes({ mapLayerOutputFormats: [] });
         }
         updateExportButtonState();
@@ -1175,10 +1183,10 @@ const Geouttag = function Geouttag(options = {}) {
         tagName: 'input',
         attributes: {
           type: 'text',
-          placeholder: 'Välj kartlager..'
-          // allow typing to filter options
+          placeholder: getMapLayersExist() ? 'Välj kartlager..' : 'Inga tillgängliga kartlager',
+          disabled: !(getMapLayersExist())
         },
-        cls: 'select-input custom-select-input text-small'
+        cls: `select-input custom-select-input text-small ${(getMapLayersExist()) ? '' : 'disabled'}`
       });
 
       customSelectOptionsDropdown = Origo.ui.Element({

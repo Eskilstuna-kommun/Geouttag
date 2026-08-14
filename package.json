@@ -18,24 +18,27 @@
     "npm-run-all2": "^8.0.4"
   },
   "devDependencies": {
-    "autoprefixer": "^10.4.21",
-    "compression-webpack-plugin": "^11.1.0",
-    "copy-webpack-plugin": "^13.0.1",
-    "css-loader": "^7.1.2",
+    "autoprefixer": "^10.5.4",
+    "compression-webpack-plugin": "^12.0.0",
+    "css-loader": "^7.1.4",
     "eslint": "^8.56.0",
     "eslint-config-airbnb-base": "^15.0.0",
     "eslint-plugin-import": "^2.32.0",
-    "exports-loader": "^0.7.0",
-    "imports-loader": "^0.8.0",
-    "mini-css-extract-plugin": "^2.9.4",
-    "postcss-loader": "^8.2.0",
-    "sass-embedded": "1.93.2",
-    "sass-loader": "^16.0.5",
-    "style-loader": "^0.21.0",
-    "webpack": "^5.102.1",
-    "webpack-bundle-analyzer": "^4.10.2",
-    "webpack-cli": "^6.0.1",
-    "webpack-dev-server": "^5.2.2",
-    "webpack-merge": "^6.0.1"
+    "exports-loader": "^5.0.0",
+    "imports-loader": "^5.0.0",
+    "mini-css-extract-plugin": "^2.10.2",
+    "sass-embedded": "1.102.0",
+    "postcss-loader": "^8.2.1",
+    "sass-loader": "^17.0.0",
+    "style-loader": "^4.0.0",
+    "webpack": "^5.109.2",
+    "webpack-bundle-analyzer": "^5.3.1",
+    "webpack-cli": "^7.2.2",
+    "webpack-dev-server": "^6.0.0",
+    "webpack-merge": "^6.0.1",
+    "copy-webpack-plugin": "^14.0.0"
+  },
+  "allowScripts": {
+    "@parcel/watcher@2.6.0": true
   }
 }

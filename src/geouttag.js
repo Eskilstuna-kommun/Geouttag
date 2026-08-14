@@ -101,12 +101,12 @@ const Geouttag = function Geouttag(options = {}) {
       const layerOptionElement = Origo.ui.Element({
         tagName: 'div',
         cls: 'option',
-        innerHTML: layer['title'],
+        innerHTML: layer.title,
         attributes: {
           data: {
-            title: layer['title'],
-            name: layer['name'],
-            workspace: layer['workspace']
+            title: layer.title,
+            name: layer.name,
+            workspace: layer.workspace
           }
         }
       });
@@ -554,17 +554,16 @@ const Geouttag = function Geouttag(options = {}) {
 
       // projectionCode = map.getView().getProjection();
 
-      const mapLayers = maplayerExport?.layers || []
+      const mapLayers = maplayerExport?.layers || [];
 
-        try {
-          const customSelectLayerOptions = getMaplayerOptions({
-            layers: mapLayers
-          })
-          customSelectOptionsDropdown.addComponents(customSelectLayerOptions);
-        } catch (e) {
-          console.warn('Could not create/attach mapLayerSelect now:', e);
-        }
-
+      try {
+        const customSelectLayerOptions = getMaplayerOptions({
+          layers: mapLayers
+        });
+        customSelectOptionsDropdown.addComponents(customSelectLayerOptions);
+      } catch (e) {
+        console.warn('Could not create/attach mapLayerSelect now:', e);
+      }
 
       if (predefinedExports) {
         predefinedExports.forEach((layer) => {
@@ -741,7 +740,7 @@ const Geouttag = function Geouttag(options = {}) {
         attributes: {
           type: 'text',
           placeholder: getMapLayersExist() ? 'Välj kartlager..' : 'Inga tillgängliga kartlager',
-          disabled: !(getMapLayersExist()),
+          disabled: !(getMapLayersExist())
         },
         cls: `select-input custom-select-input text-small ${(getMapLayersExist()) ? '' : 'disabled'}`
       });

@@ -32,7 +32,10 @@ const Geouttag = function Geouttag(options = {}) {
   let viewer;
   let map;
   let geouttag;
-  let x1; let y1; let x2; let y2;
+  let x1;
+  let y1;
+  let x2;
+  let y2;
   let exportBtn;
   let productSelect;
   let fileTypeSelect;

@@ -5,38 +5,24 @@
   "main": "geouttag.js",
   "scripts": {
     "start": "npm-run-all --parallel watch-js watch-sass",
-    "watch-js": "webpack-dev-server --config ./tasks/webpack.dev.js --mode development",
-    "watch-sass": "sass -w scss/geouttag.scss ../plugins/geouttag/geouttag.css",
-    "prewatch-sass": "sass scss/geouttag.scss ../plugins/geouttag/geouttag.css",
-    "build": "webpack --config ./tasks/webpack.prod.js && npm run build-sass",
-    "build-sass": "sass scss/geouttag.scss build/css/geouttag.css"
+    "watch-js": "vite build --watch --mode development ",
+    "prewatch-sass": "copyfiles -u 2 resources/svg/material-icons.svg ../origo/plugins/geouttag",
+    "watch-sass": "sass -w scss/geouttag.scss ../origo/plugins/geouttag/geouttag.css",
+    "build": "vite build --mode production && npm run build-sass && copyfiles -u 2 resources/svg/material-icons.svg build",
+    "build-sass": "sass --no-source-map scss/geouttag.scss build/geouttag.css"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "dotenv": "^17.4.2",
+    "copyfiles": "^2.4.1",
     "npm-run-all2": "^8.0.4"
   },
   "devDependencies": {
-    "autoprefixer": "^10.5.4",
-    "compression-webpack-plugin": "^12.0.0",
-    "css-loader": "^7.1.4",
     "eslint": "^8.56.0",
     "eslint-config-airbnb-base": "^15.0.0",
     "eslint-plugin-import": "^2.32.0",
-    "exports-loader": "^5.0.0",
-    "imports-loader": "^5.0.0",
-    "mini-css-extract-plugin": "^2.10.2",
     "sass-embedded": "1.102.0",
-    "postcss-loader": "^8.2.1",
-    "sass-loader": "^17.0.0",
-    "style-loader": "^4.0.0",
-    "webpack": "^5.109.2",
-    "webpack-bundle-analyzer": "^5.3.1",
-    "webpack-cli": "^7.2.2",
-    "webpack-dev-server": "^6.0.0",
-    "webpack-merge": "^6.0.1",
-    "copy-webpack-plugin": "^14.0.0"
+    "vite": "^8.2.1"
   },
   "allowScripts": {
     "@parcel/watcher@2.6.0": true

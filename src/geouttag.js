@@ -24,7 +24,7 @@ const Geouttag = function Geouttag(options = {}) {
     predefinedExports = [],
     maplayerExport = {},
     drawlayerTitle = '',
-    arcgisClientId = process.env.ARC_GIS_CLIENT_ID || '',
+    arcgisClientId = import.meta.env.VITE_ARC_GIS_CLIENT_ID || '',
     arcgisTokenEndpoint = 'https://geo.eskilstuna.se/portal/sharing/rest/oauth2/token'
 
   } = options;

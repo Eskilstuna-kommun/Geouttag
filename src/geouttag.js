@@ -25,14 +25,17 @@ const Geouttag = function Geouttag(options = {}) {
     maplayerExport = {},
     drawlayerTitle = '',
     arcgisClientId = import.meta.env.VITE_ARC_GIS_CLIENT_ID || '',
-    arcgisTokenEndpoint = 'https://geo.eskilstuna.se/portal/sharing/rest/oauth2/token'
+    arcgisTokenEndpoint = import.meta.env.VITE_ARC_GIS_TOKEN_ENDPOINT || ''
 
   } = options;
 
   let viewer;
   let map;
   let geouttag;
-  let x1; let y1; let x2; let y2;
+  let x1;
+  let y1;
+  let x2;
+  let y2;
   let exportBtn;
   let productSelect;
   let fileTypeSelect;

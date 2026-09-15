@@ -61,6 +61,7 @@ const Geouttag = function Geouttag(options = {}) {
   let drawHandler;
   let signOutBtn;
   let userInfoComp;
+  let pendingRasterExport = false;
   const restrictedLayers = [];
 
   loadSVGs();
@@ -663,7 +664,10 @@ const Geouttag = function Geouttag(options = {}) {
               // Already logged in — download directly
               createImageServer().sendArcGISRequest();
             } else {
-              // Not logged in — open OAuth popup; handleOAuthCallback will exchange the code for tokens
+              // Not logged in — open OAuth popup; handleOAuthCallback will exchange the code for tokens.
+              // Mark the export as pending so updateAuthUI() can kick off the download itself once the
+              // session is ready (with a *fresh* ImageServer reflecting the currently drawn extent).
+              pendingRasterExport = true;
               await createImageServer().openArcGISAuth();
             }
           } else {
@@ -772,6 +776,14 @@ const Geouttag = function Geouttag(options = {}) {
       // Helper to toggle auth UI state
       function updateAuthUI(sessionInfo) {
         arcgisSession = sessionInfo || null;
+
+        // If sign-in was triggered by an export click, resume the download now that we have a
+        // session — build a *fresh* ImageServer so it picks up the currently drawn extent instead
+        // of whatever (possibly undefined) extent existed when setupArcGISAuth() first ran.
+        if (pendingRasterExport && arcgisSession && arcgisSession.access_token) {
+          pendingRasterExport = false;
+          createImageServer().sendArcGISRequest();
+        }
       }
 
       // Only wire up ArcGIS auth if client ID was provided

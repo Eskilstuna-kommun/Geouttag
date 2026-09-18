@@ -3,7 +3,7 @@ import 'Origo';
 import loadSVGs from './loadresources';
 import GeouttagDrawHandler from './drawhandler';
 import styles from './styles';
-import ImageServer, { handleOAuthCallback } from './utils/imageserver';
+import ImageServer, { handleOAuthCallback, isArcGISSessionValid } from './utils/imageserver';
 
 const Draw = Origo.ol.interaction.Draw;
 // const createBox = Origo.ol.interaction.Draw.createBox;
@@ -83,8 +83,25 @@ const Geouttag = function Geouttag(options = {}) {
       x1,
       y1,
       x2,
-      y2
+      y2,
+      onInvalidSession: handleInvalidArcgisSession
     });
+  }
+
+  // Called when an ArcGIS request comes back with a session restored from localStorage that has since expired. Clears the stale session,
+  // and re-opens the sign-in popup so the user just has to log in again
+  // pendingRasterExport ensures the export resumes automatically once that succeeds, so 'Starta export' not needs to be pressed on again efter the authentication.
+  function handleInvalidArcgisSession() {
+    arcgisSession = null;
+    if (userInfoComp) {
+      const userInfoEl = document.getElementById(userInfoComp.getId());
+      if (userInfoEl) {
+        userInfoEl.style.display = 'none';
+        userInfoEl.innerHTML = '';
+      }
+    }
+    pendingRasterExport = true;
+    createImageServer().openArcGISAuth();
   }
 
   function getMapLayersExist() {
@@ -663,11 +680,12 @@ const Geouttag = function Geouttag(options = {}) {
 
           if (isRaster) {
             // Raster product: authenticate if needed, then download via ArcGIS ImageServer
-            if (arcgisSession && arcgisSession.access_token) {
+            if (arcgisSession && isArcGISSessionValid(arcgisSession)) {
               // Already logged in — download directly
               createImageServer().sendArcGISRequest();
             } else {
-              // Not logged in — open OAuth popup; handleOAuthCallback will exchange the code for tokens.
+              // Not logged in (or the stored session has expired) — open OAuth popup;
+              // handleOAuthCallback will exchange the code for tokens.
               // Mark the export as pending so updateAuthUI() can kick off the download itself once the
               // session is ready (with a *fresh* ImageServer reflecting the currently drawn extent).
               pendingRasterExport = true;

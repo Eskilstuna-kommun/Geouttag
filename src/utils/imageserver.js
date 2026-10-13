@@ -56,6 +56,15 @@ async function challengeFromVerifier(verifier) {
     .replace(/\//g, '_')
     .replace(/=+$/, '');
 }
+/*
+Function that checks whether the session has a valid access token that has not expired.
+Checks a stored session before reusing it
+*/
+export function isArcGISSessionValid(session) {
+  if (!session || !session.access_token) return false;
+  if (!session.expires_at) return true; // no expiry info available — assume valid until ArcGIS says otherwise
+  return session.expires_at > Date.now() + 5000; // A small safety margin avoids sending a request with a token that expires very soon ( within 5 seconds)
+}
 
 const ImageServer = function ImageServer(options = {}) {
   const {
@@ -70,21 +79,32 @@ const ImageServer = function ImageServer(options = {}) {
     x1,
     y1,
     x2,
-    y2
+    y2,
+    onInvalidSession
   } = options;
 
   // Helper to open ArcGIS OAuth popup (Authorization Code with PKCE)
   async function openArcGISAuth() {
+    const popupWidth = 600;
+    const popupHeight = 400;
+    const left = Math.max(0, Math.round((window.screen.availWidth - popupWidth) / 2));
+    const top = Math.max(0, Math.round((window.screen.availHeight - popupHeight) / 2));
+
+    const authWindow = window.open('about:blank', 'oauth-window', `height=${popupHeight},width=${popupWidth},left=${left},top=${top},menubar=no,location=yes,resizable=yes,scrollbars=yes,status=yes`);
+
     const codeVerifier = generateRandomString();
     const codeChallenge = await challengeFromVerifier(codeVerifier);
     storedCodeVerifier = codeVerifier;
     const redirectUri = window.location.href;
     const authorizationEndpoint = `https://geo.eskilstuna.se/portal/sharing/rest/oauth2/authorize?client_id=${arcgisClientId}&code_challenge=${codeChallenge}&code_challenge_method=S256&redirect_uri=${window.encodeURIComponent(redirectUri)}&response_type=code&expiration=20160`;
-    const popupWidth = 600;
-    const popupHeight = 400;
-    const left = Math.max(0, Math.round((window.screen.availWidth - popupWidth) / 2));
-    const top = Math.max(0, Math.round((window.screen.availHeight - popupHeight) / 2));
-    window.open(authorizationEndpoint, 'oauth-window', `height=${popupHeight},width=${popupWidth},left=${left},top=${top},menubar=no,location=yes,resizable=yes,scrollbars=yes,status=yes`);
+
+    if (authWindow) {
+      authWindow.location.href = authorizationEndpoint;
+    } else {
+      // Popup was blocked outright — fall back to a normal navigation (still same-tab-name so a
+      // second attempt reuses/replaces it rather than piling up tabs).
+      window.open(authorizationEndpoint, 'oauth-window');
+    }
   }
 
   function getCodeVerifier() {
@@ -173,7 +193,14 @@ const ImageServer = function ImageServer(options = {}) {
       })
       .then(async (data) => {
         if (data.error) {
-          throw new Error(data.error.message || 'ArcGIS returned an error');
+          const errorCode = data.error.code;
+          const errorMessage = data.error.message || 'ArcGIS returned an error';
+          if (errorCode === 498 || errorCode === 499 || /invalid token|token required/i.test(errorMessage)) {
+            localStorage.removeItem('__ARCGIS_USER_SESSION__');
+            if (onInvalidSession) onInvalidSession();
+            throw new Error(`ArcGIS-sessionen har gått ut eller är ogiltig. Logga in igen och försök exportera på nytt. (${errorMessage})`);
+          }
+          throw new Error(errorMessage);
         }
 
         // Extract download URLs and file info from rasterFiles
@@ -366,6 +393,12 @@ const ImageServer = function ImageServer(options = {}) {
       })
       .catch((error) => {
         console.error('ArcGIS download failed:', error);
+        // If the session was invalid/expired, onInvalidSession() above already cleared it and
+        // kicked off a fresh sign-in — opening the fallback link would just hit the same expired
+        // token and fail again, so skip it in that case.
+        if (/gått ut eller är ogiltig/.test(error.message)) {
+          return;
+        }
         // Fallback: open the HTML page directly
         const fallbackUrl = jsonUrl.replace('f=json', 'f=html');
         const fallbackWindow = window.open(fallbackUrl, '_blank');
@@ -422,8 +455,10 @@ const ImageServer = function ImageServer(options = {}) {
           }
           const sessionInfo = await response.json();
           if (sessionInfo.access_token) {
+            if (sessionInfo.expires_in) {
+              sessionInfo.expires_at = Date.now() + (Number(sessionInfo.expires_in) * 1000);
+            }
             updateAuthUI(sessionInfo);
-            sendArcGISRequest(sessionInfo);
           } else {
             console.error('ArcGIS OAuth failed: no access_token in response', sessionInfo);
           }
@@ -431,8 +466,12 @@ const ImageServer = function ImageServer(options = {}) {
         }
         // Implicit grant fallback — authResponse is an object with access_token
         if (authResponse && authResponse.access_token) {
-          updateAuthUI(authResponse);
-          sendArcGISRequest(authResponse);
+          const responseObj = authResponse;
+          if (responseObj.expires_in && !responseObj.expires_at) {
+            responseObj.expires_at = Date.now() + (Number(authResponse.expires_in) * 1000);
+          }
+          // See note above — download is triggered by geouttag.js's pendingRasterExport flow.
+          updateAuthUI(responseObj);
           return;
         }
         console.error('ArcGIS OAuth failed: unrecognized response', authResponse);
@@ -446,8 +485,12 @@ const ImageServer = function ImageServer(options = {}) {
       const savedSession = localStorage.getItem('__ARCGIS_USER_SESSION__');
       if (savedSession) {
         const parsed = JSON.parse(savedSession);
-        if (parsed && parsed.access_token) {
+        if (parsed && isArcGISSessionValid(parsed)) {
           updateAuthUI(parsed);
+        } else if (parsed) {
+          // Stored session has already expired — drop it instead of restoring a session that's
+          // guaranteed to fail with "Invalid Token" on first use.
+          localStorage.removeItem('__ARCGIS_USER_SESSION__');
         }
       }
     } catch (e) {

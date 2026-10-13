@@ -3,7 +3,7 @@ import 'Origo';
 import loadSVGs from './loadresources';
 import GeouttagDrawHandler from './drawhandler';
 import styles from './styles';
-import ImageServer, { handleOAuthCallback } from './utils/imageserver';
+import ImageServer, { handleOAuthCallback, isArcGISSessionValid } from './utils/imageserver';
 
 const Draw = Origo.ol.interaction.Draw;
 // const createBox = Origo.ol.interaction.Draw.createBox;
@@ -64,12 +64,30 @@ const Geouttag = function Geouttag(options = {}) {
   let drawHandler;
   let signOutBtn;
   let userInfoComp;
-  // All configured filetypes in one lookup, keyed by id. Every entry carries
-  // the FME workspace to run and the outputFormat to request, no matter if it
-  // belongs to a product or to the common layer config.
   const filetypesById = {};
+  let pendingRasterExport = false;
+  const restrictedLayers = [];
 
   loadSVGs();
+
+  // Called when an ArcGIS request comes back with a session restored from localStorage that has since expired. Clears the stale session,
+  // and re-opens the sign-in popup so the user just has to log in again
+  // pendingRasterExport ensures the export resumes automatically once that succeeds, so 'Starta export' not needs to be pressed on again efter the authentication.
+  function handleInvalidArcgisSession() {
+    arcgisSession = null;
+    if (userInfoComp) {
+      const userInfoEl = document.getElementById(userInfoComp.getId());
+      if (userInfoEl) {
+        userInfoEl.style.display = 'none';
+        userInfoEl.innerHTML = '';
+      }
+    }
+    pendingRasterExport = true;
+    // Re-opens the sign-in popup. A bare ImageServer is enough for that — openArcGISAuth only
+    // uses arcgisClientId — which keeps this function from referencing createImageServer below
+    // (the two would otherwise be mutually recursive, which no-use-before-define disallows).
+    ImageServer({ arcgisClientId }).openArcGISAuth();
+  }
 
   function createImageServer() {
     return ImageServer({
@@ -85,10 +103,10 @@ const Geouttag = function Geouttag(options = {}) {
       x1,
       y1,
       x2,
-      y2
+      y2,
+      onInvalidSession: handleInvalidArcgisSession
     });
   }
-
   // helper function to create ids for the filetype objects
   function generateFiletypeId({ productNameorLayer, filetypeTitle }) {
     const normalizedTitle = filetypeTitle.toLowerCase().split(' ').join('_');
@@ -709,11 +727,15 @@ const Geouttag = function Geouttag(options = {}) {
 
           if (isRaster) {
             // Raster product: authenticate if needed, then download via ArcGIS ImageServer
-            if (arcgisSession && arcgisSession.access_token) {
+            if (arcgisSession && isArcGISSessionValid(arcgisSession)) {
               // Already logged in — download directly
               createImageServer().sendArcGISRequest();
             } else {
-              // Not logged in — open OAuth popup; handleOAuthCallback will exchange the code for tokens
+              // Not logged in (or the stored session has expired) — open OAuth popup;
+              // handleOAuthCallback will exchange the code for tokens.
+              // Mark the export as pending so updateAuthUI() can kick off the download itself once the
+              // session is ready (with a *fresh* ImageServer reflecting the currently drawn extent).
+              pendingRasterExport = true;
               await createImageServer().openArcGISAuth();
             }
           } else {
@@ -822,6 +844,14 @@ const Geouttag = function Geouttag(options = {}) {
       // Helper to toggle auth UI state
       function updateAuthUI(sessionInfo) {
         arcgisSession = sessionInfo || null;
+
+        // If sign-in was triggered by an export click, resume the download now that we have a
+        // session — build a *fresh* ImageServer so it picks up the currently drawn extent instead
+        // of whatever (possibly undefined) extent existed when setupArcGISAuth() first ran.
+        if (pendingRasterExport && arcgisSession && arcgisSession.access_token) {
+          pendingRasterExport = false;
+          createImageServer().sendArcGISRequest();
+        }
       }
 
       // Only wire up ArcGIS auth if client ID was provided

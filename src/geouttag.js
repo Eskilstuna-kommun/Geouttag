@@ -335,7 +335,6 @@ const Geouttag = function Geouttag(options = {}) {
       : '';
     const urlEncodedData = new URLSearchParams({
       geom: `POLYGON ${coordinatesString}`,
-      srs: 'EPSG:3010',
       outputFormat: filetype.outputFormat,
       token: import.meta.env.VITE_FME_FLOW_TOKEN
     });
@@ -777,7 +776,7 @@ const Geouttag = function Geouttag(options = {}) {
       coordSysSelect = Origo.ui.Element({
         tagName: 'select',
         cls: 'text-small',
-        innerHTML: coordSyses.map((epsgCode) => `<option value="${epsgCode}">EPSG:${epsgCode}</option>`).join('')
+        innerHTML: coordSyses.map((epsgCode) => `<option value="${epsgCode.ref}">${epsgCode.title}</option>`).join('')
       });
 
       headerComp = Origo.ui.Element({

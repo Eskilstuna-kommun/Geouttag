@@ -26,7 +26,11 @@ The plugin can be loaded like this in an html-file:
       const geouttag = Geouttag({
         fmeFlowDataDownloadUrl: "URL to the FME Flow data download service",
         // Coordinate systems offered in the export UI, as EPSG codes
-        coordSyses: ["3010", "3006", "4326", "3857", "3021"],
+        coordSyses: [
+          {ref: "3010", title: "SWEREF99 16 30"},
+          {ref: "3006", title: "SWEREF99 TM"},
+          {ref: "4326", title: "World Geodetic System 1984"}
+        ],
         products: [ // "products" are sometimes a combination of spatial tables and related data, and can have their own output file formats and FME workspaces
           {
             name: "base",

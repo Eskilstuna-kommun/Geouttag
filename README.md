@@ -24,97 +24,96 @@ The plugin can be loaded like this in an html-file:
       origo.on('load', function(viewer) {
 
       const geouttag = Geouttag({
-        url: "URL to FME",
-        filePath: "any path where user can get the export",
-        contactMail: "support mail",
-        infoLink: "link to user instructions",
-        logo: "img/logo.png",
+        fmeFlowDataDownloadUrl: "URL to the FME Flow data download service",
         warningLimit: 500*500,
-        warningTooltip: "warning text hover",
-        warningText: "warning text in modal",
         errorLimit: 2000*2000,
-        errorTooltip: "error text hover",
-        errorText: "error text in modal",
-        infoText: "Informative description for users",
-        predefinedExports: [
+        products: [ // "products" are sometimes a combination of spatial tables and related data, and can have their own output file formats and FME workspaces
           {
-            name: 'base',
-            title: 'Base map',
+            name: "base",
+            title: "Base map",
+            FMEWorkspace: "basemap.fmw",
             filetypes: [
               {
-                title: 'DWG',
-                outputFormat: 'DWG', // 'outputFormat' is sent as a query param in the FME Flow request for the workspace to do with as it pleases
-                workspace: 'basemap.fmw'
+                title: "DWG",
+                outputFormat: "DWG"
               },
               {
-                title: 'Shape',
-                outputFormat: 'SHP',
-                workspace: 'basemap.fmw'
+                title: "Shape",
+                outputFormat: "SHP"
               }
             ]
           },
           {
-            name: 'cyclingmap',
-            title: 'Cycling map',
+            name: "cyclingmap",
+            title: "Cycling map",
+            FMEWorkspace: "cycling_cad.fmw",
             filetypes: [
               {
-                title: 'DWG',
-                workspace: 'cycling_cad.fmw'
+                title: "DWG",
+                outputFormat: "DWG"
               },
               {
-                title: 'Shape',
-                workspace: 'cycling_shape.fmw'
+                title: "Shape",
+                outputFormat: "SHP"
               }
-            ],
-            restricted: true
+            ]
           },
           {
-            name: 'hojddata_nh_grid',
-            title: 'National elevation data 2015',
+            name: "hojddata_nh_grid",
+            title: "National elevation data 2015",
+            FMEWorkspace: "grid_elev.fmw",
+            // imageServer: true exports via an ArcGIS ImageServer instead of FME Flow
             filetypes: [
               {
-                title: 'ESRI GRID',
-                workspace: 'grid_elev.fmw'
+                title: "ESRI GRID",
+                outputFormat: "ESRI GRID"
               }
             ]
           }
         ],
-        maplayerExport: {
-        filetypes: [
-          {
-            title: 'GML3',
-            outputFormat: 'GML3'
-          },
-          {
-            title: 'GeoJSON',
-            outputFormat: 'application/json'
-          },
-          {
-            title: 'dxf',
-            outputFormat: 'dxf'
-          },
-          {
-            title: 'GeoPackage',
-            outputFormat: 'geopkg'
-
-          }
-        ],
-        FMEWorkspace: 'maplayers_wfs.fmw',
-        layers: [
+        layersConf: { // "layers" have common properties - one shared FME workspace and output file formats
+          filetypes: [
             {
-                name: "sokvyx_intressepunkter_kff_ok_bibliotek",
-                title: "Bibliotek",
-                workspace: "etuna"
+              title: "GML3",
+              outputFormat: "GML3"
             },
             {
-                name: "sokvyx_intressepunkter_utescen",
-                title: "Utescener",
-                workspace: "etuna"
+              title: "GeoJSON",
+              outputFormat: "application/json"
+            },
+            {
+              title: "dxf",
+              outputFormat: "dxf"
+            },
+            {
+              title: "GeoPackage",
+              outputFormat: "geopkg"
             }
-        ]
+          ],
+          FMEWorkspace: "maplayers_wfs.fmw",
+          layers: [
+            {
+              name: "sokvyx_intressepunkter_kff_ok_bibliotek",
+              title: "Bibliotek",
+              workspace: "etuna"
+            },
+            {
+              name: "sokvyx_intressepunkter_utescen",
+              title: "Utescener",
+              workspace: "etuna"
+            }
+          ]
+        }
       });
     viewer.addComponent(geouttag);
 
     });
 </script>
 ```
+
+#### Configuration notes
+
+- Products declare their own `FMEWorkspace`; all layers share the single `FMEWorkspace` on `layersConf`.
+- Each selected product or layer is posted to the workspace as an `exportName` parameter, one parameter per item.
+- `outputFormat` is sent as a parameter in the FME Flow request for the workspace to do with as it pleases.
+- The FME Flow token is read from the `VITE_FME_FLOW_TOKEN` environment variable at build time (see `.env.example`).

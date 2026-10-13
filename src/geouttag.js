@@ -18,11 +18,11 @@ handleOAuthCallback();
      export data from a marked area in map */
 const Geouttag = function Geouttag(options = {}) {
   const {
-    url = '',
+    fmeFlowDataDownloadUrl = '',
     warningLimit,
     errorLimit,
-    predefinedExports = [],
-    maplayerExport = {},
+    products = [],
+    layersConf = {},
     drawlayerTitle = '',
     arcgisClientId = import.meta.env.VITE_ARC_GIS_CLIENT_ID || '',
     arcgisTokenEndpoint = import.meta.env.VITE_ARC_GIS_TOKEN_ENDPOINT || ''
@@ -52,26 +52,46 @@ const Geouttag = function Geouttag(options = {}) {
   let additionalLayersTextComp;
   let formatSelectorTextComp;
   let drawToolSelectorTextComp;
-  let customSelect;
-  let customSelectOptionsDropdown;
-  let customSelectSelectedOptions;
-  let customSelectInput;
+  let layersSelect;
+  let layersSelectOptionsDropdown;
+  let layersSelectSelectedOptions;
+  let layersSelectInput;
   let mapLayerOptionElements = [];
-  let selectedValues = [];
+  let selectedLayers = [];
   let geouttagLayer;
   let currentDrawType = 'Polygon';
   let coords;
   let drawHandler;
   let signOutBtn;
   let userInfoComp;
+  const filetypesById = {};
   let pendingRasterExport = false;
   const restrictedLayers = [];
 
   loadSVGs();
 
+  // Called when an ArcGIS request comes back with a session restored from localStorage that has since expired. Clears the stale session,
+  // and re-opens the sign-in popup so the user just has to log in again
+  // pendingRasterExport ensures the export resumes automatically once that succeeds, so 'Starta export' not needs to be pressed on again efter the authentication.
+  function handleInvalidArcgisSession() {
+    arcgisSession = null;
+    if (userInfoComp) {
+      const userInfoEl = document.getElementById(userInfoComp.getId());
+      if (userInfoEl) {
+        userInfoEl.style.display = 'none';
+        userInfoEl.innerHTML = '';
+      }
+    }
+    pendingRasterExport = true;
+    // Re-opens the sign-in popup. A bare ImageServer is enough for that — openArcGISAuth only
+    // uses arcgisClientId — which keeps this function from referencing createImageServer below
+    // (the two would otherwise be mutually recursive, which no-use-before-define disallows).
+    ImageServer({ arcgisClientId }).openArcGISAuth();
+  }
+
   function createImageServer() {
     return ImageServer({
-      predefinedExports,
+      products,
       productSelect,
       fileTypeSelect,
       arcgisSession,
@@ -87,25 +107,46 @@ const Geouttag = function Geouttag(options = {}) {
       onInvalidSession: handleInvalidArcgisSession
     });
   }
-
-  // Called when an ArcGIS request comes back with a session restored from localStorage that has since expired. Clears the stale session,
-  // and re-opens the sign-in popup so the user just has to log in again
-  // pendingRasterExport ensures the export resumes automatically once that succeeds, so 'Starta export' not needs to be pressed on again efter the authentication.
-  function handleInvalidArcgisSession() {
-    arcgisSession = null;
-    if (userInfoComp) {
-      const userInfoEl = document.getElementById(userInfoComp.getId());
-      if (userInfoEl) {
-        userInfoEl.style.display = 'none';
-        userInfoEl.innerHTML = '';
-      }
-    }
-    pendingRasterExport = true;
-    createImageServer().openArcGISAuth();
+  // helper function to create ids for the filetype objects
+  function generateFiletypeId({ productNameorLayer, filetypeTitle }) {
+    const normalizedTitle = filetypeTitle.toLowerCase().split(' ').join('_');
+    return `${productNameorLayer}_${normalizedTitle}`;
   }
 
-  function getMapLayersExist() {
-    const mapLayersExist = maplayerExport && maplayerExport.layers && (maplayerExport.layers.length > 0);
+  // Products have their own workspace per product, layers share the one
+  // workspace declared on layersConf. Normalize both to the same filetype
+  // shape ({ id, title, outputFormat, FMEWorkspace }) and register them for
+  // lookup by id when the export is posted.
+  const productFiletypesByName = {};
+
+  function normalizeFiletypes({ ownerName, filetypes, FMEWorkspace }) {
+    return (filetypes || []).map((filetype) => {
+      const normalized = {
+        ...filetype,
+        id: generateFiletypeId({ productNameorLayer: ownerName, filetypeTitle: filetype.title }),
+        FMEWorkspace
+      };
+      filetypesById[normalized.id] = normalized;
+      return normalized;
+    });
+  }
+
+  products.forEach((product) => {
+    productFiletypesByName[product.name] = normalizeFiletypes({
+      ownerName: product.name,
+      filetypes: product.filetypes,
+      FMEWorkspace: product.FMEWorkspace || product.FMEworkspace
+    });
+  });
+
+  const layerFiletypes = normalizeFiletypes({
+    ownerName: 'layer',
+    filetypes: layersConf.filetypes,
+    FMEWorkspace: layersConf.FMEWorkspace
+  });
+
+  function getConfiguredLayersExist() {
+    const mapLayersExist = layersConf && layersConf.layers && (layersConf.layers.length > 0);
     return mapLayersExist;
   }
 
@@ -115,8 +156,9 @@ const Geouttag = function Geouttag(options = {}) {
     const productSelectElement = document.getElementById(productSelect.getId());
     const fileTypeSelectElement = document.getElementById(fileTypeSelect.getId());
 
-    const hasProductSelection = productSelectElement.value;
-    const hasMapLayerSelection = selectedValues.length > 0;
+    const hasProductSelection = !!productSelectElement.value
+      && productSelectElement.value !== 'defaultSelectionValue';
+    const hasMapLayerSelection = selectedLayers.length > 0;
     const hasFileTypeSelection = !fileTypeSelectElement.disabled
       && fileTypeSelectElement.options.length > 0
       && !!fileTypeSelectElement.value;
@@ -125,22 +167,15 @@ const Geouttag = function Geouttag(options = {}) {
     exportBtnElement.disabled = !exportReady;
   }
 
-  /* Shows available filetype in dropdown for selected layer/product
-  suitable handler function for listeners on productSelect and maplayer(custom)Select */
-  function setFiletypes({ selValue, mapLayerOutputFormats }) {
-    let currFiletypes;
-    if (selValue && (selValue !== 'defaultSelectionValue')) {
-      currFiletypes = predefinedExports.find((product) => product.name === selValue).filetypes;
-    } else if (mapLayerOutputFormats?.length > 0) currFiletypes = maplayerExport.filetypes;
-    else currFiletypes = [];
-    let optionsHtml = '';
-    currFiletypes.forEach((filetype) => {
-      optionsHtml += `<option value="${filetype.title}">${filetype.title}</option>`;
-    });
+  // Set the filetype selector to the filetypes available for the chosen
+  // product or layers. Called without filetypes to clear the selection when
+  // neither a product nor any layer is chosen.
+  function setFiletypes({ filetypes } = {}) {
     const filetypeSelectElement = document.getElementById(fileTypeSelect.getId());
-    filetypeSelectElement.innerHTML = optionsHtml;
-    if ((filetypeSelectElement.options.length > 0) && (filetypeSelectElement.disabled)) filetypeSelectElement.disabled = false;
-    else if ((filetypeSelectElement.options.length === 0) && (filetypeSelectElement.disabled === false)) filetypeSelectElement.disabled = true;
+    filetypeSelectElement.innerHTML = (filetypes || [])
+      .map((filetype) => `<option value="${filetype.id}">${filetype.title}</option>`)
+      .join('');
+    filetypeSelectElement.disabled = filetypeSelectElement.options.length === 0;
   }
 
   function getMaplayerOptions({ layers }) {
@@ -163,8 +198,8 @@ const Geouttag = function Geouttag(options = {}) {
 
   function filterCustomOptions(filterText) {
     const text = (filterText || '').trim().toLowerCase();
-    const customSelectOptions = customSelectOptionsDropdown.getComponents().map(c => document.getElementById(c.getId()));
-    customSelectOptions.forEach((optEl) => {
+    const layersSelectOptions = layersSelectOptionsDropdown.getComponents().map(c => document.getElementById(c.getId()));
+    layersSelectOptions.forEach((optEl) => {
       if (!optEl) return;
       const title = (optEl.getAttribute('data-title') || optEl.textContent || '').toLowerCase();
       const optionsElement = optEl;
@@ -177,64 +212,64 @@ const Geouttag = function Geouttag(options = {}) {
   }
 
   function getSelectOptionsHtml({ selectOptions, defaultNothing }) {
-    if (defaultNothing) selectOptions.unshift(defaultNothing);
     let html = '';
+    if (defaultNothing) html += `<option value="${defaultNothing.name}">${defaultNothing.title}</option>`;
     selectOptions.forEach((sOption) => {
       html += `<option value="${sOption.name}">${sOption.title}</option>`;
     });
     return html;
   }
 
-  /* Collect data from elements and send request to server */
+  /* Collect data from the panel elements and post the form to FME Flow.
+     Either one product or one or many layers is exported, never both. */
   function sendData() {
     const productSelectElement = document.getElementById(productSelect.getId());
     const fileTypeSelectElement = document.getElementById(fileTypeSelect.getId());
 
-    const selectedExportName = productSelectElement.value;
-    const isMapLayerExport = selectedExportName && selectedValues.length > 0;
-    const selectedExport = isMapLayerExport
-      ? maplayerExport
-      : predefinedExports.find((layer) => layer.name === selectedExportName);
+    const filetype = filetypesById[fileTypeSelectElement.value];
+    if (!filetype) {
+      console.error('No filetype selected for export');
+      return;
+    }
 
-    const fileTypeName = fileTypeSelectElement.value;
-    const availableFiletypes = selectedExport.filetypes || [];
-    const fileTypeObj = availableFiletypes.find((filetype) => fileTypeName === filetype.title);
+    const isLayerExport = selectedLayers.length > 0;
+    const selectedProduct = products.find((product) => product.name === productSelectElement.value);
+    // One exportName param per exported item (product name or layer name)
+    const exportNames = isLayerExport ? selectedLayers : [productSelectElement.value];
+    // Titles, used for the message shown while the export is running
+    const displayNames = isLayerExport
+      ? selectedLayers
+        .map((name) => layersConf.layers?.find((layer) => layer.name === name)?.title || name)
+        .join(', ')
+      : selectedProduct?.title || productSelectElement.value;
 
-    const FMEscript = fileTypeObj.workspace || maplayerExport.FMEWorkspace;
-    const fileType = fileTypeObj.outputFormat;
-    const layerType = selectedExport.name || selectedExportName;
-
-    const selectedLayerNames = isMapLayerExport ? selectedValues : [layerType];
-    const productNameParams = selectedLayerNames
-      .map((name) => `&productName=${encodeURIComponent(name)}`)
-      .join('');
-
-    const displayProductNames = selectedLayerNames.join(', ');
-
-    const d = new Date();
-    let requestUrl = `${url}/${FMEscript}?geom=POLYGON `;
-
+    let coordinatesString = '';
     // Check if polygon coordinates
     if (coords && currentDrawType === 'Polygon') {
       // Use actual polygon coordinates
       const coordinateString = coords
         .map(coord => `${coord[0]} ${coord[1]}`)
         .join(',');
-      requestUrl += `((${coordinateString}))`;
+      coordinatesString = `((${coordinateString}))`;
     } else if (x1 !== undefined && y1 !== undefined && x2 !== undefined && y2 !== undefined) {
       // Use bounding box for other tools
-      requestUrl += `((${x1} ${y1},${x1} ${y2},${x2} ${y2},${x2} ${y1},${x1} ${y1}))`;
+      coordinatesString = `((${x1} ${y1},${x1} ${y2},${x2} ${y2},${x2} ${y1},${x1} ${y1}))`;
     } else {
       console.error('No coordinates available for export');
       return;
     }
 
-    requestUrl
-      += `&srs=EPSG:3010${productNameParams}`
-        + '&outputFilename='
-        + `&outputFormat=${fileType}`
-        + '&token=7732ad7a4a12634f5784a8188e633f0c79a95170'
-        + `&id=${d.getTime()}`;
+    const requestUrl = new URL(`${fmeFlowDataDownloadUrl}/${filetype.FMEWorkspace}`);
+    const urlEncodedData = new URLSearchParams({
+      geom: `POLYGON ${coordinatesString}`,
+      srs: 'EPSG:3010',
+      outputFormat: filetype.outputFormat,
+      token: import.meta.env.VITE_FME_FLOW_TOKEN
+    });
+    exportNames.forEach((name) => urlEncodedData.append('exportName', name));
+
+    const inputsString = Array.from(urlEncodedData.entries())
+      .map(([name, value]) => `<input type="hidden" name="${name}" value="${value}">`);
 
     // Open a new window with spinner, then load the export
     const exportWindow = window.open('', '_blank');
@@ -245,7 +280,7 @@ const Geouttag = function Geouttag(options = {}) {
       return;
     }
 
-    // Create HTML content with spinner
+    // Create HTML content with spinner and form for POST request
     const htmlContent = `
       <!DOCTYPE html>
       <html lang="sv">
@@ -308,33 +343,53 @@ const Geouttag = function Geouttag(options = {}) {
               height: 100%;
               border: none;
             }
+
+            form {
+              display: none;
+            }
           </style>
         </head>
         <body>
           <div class="spinner"></div>
-          <p class="message">Väntar på export av <strong>${displayProductNames}</strong> från FME Flow...<br><br>Låt fönstret vara öppet och vänta tills exporten är klar.<br><br>Om du stänger fönstret innan exporten är klar måste du starta om exporten.</p>
+          <p class="message">Väntar på export av <strong>${displayNames}</strong> från FME Flow...<br><br>Låt fönstret vara öppet och vänta tills exporten är klar.<br><br>Om du stänger fönstret innan exporten är klar måste du starta om exporten.</p>
 
           <div class="iframe-container" id="iframe-container">
-            <iframe id="export-iframe" src="${requestUrl}" title="Export"></iframe>
+            <iframe id="export-iframe" title="Export"></iframe>
           </div>
 
+          <form id="export-form" action="${requestUrl}" method="POST">
+          ${inputsString.join('')}
+          </form>
+
           <script>
-            // Hide spinner and show iframe when it loads
+            // Submit the form to trigger the POST request
+            const form = document.getElementById('export-form');
+            form.submit();
+
+            // Handle the response
             const iframe = document.getElementById('export-iframe');
             const container = document.getElementById('iframe-container');
             const spinner = document.querySelector('.spinner');
             const message = document.querySelector('.message');
 
-            iframe.addEventListener('load', function() {
-              spinner.style.display = 'none';
-              message.style.display = 'none';
-              container.style.display = 'block';
+            // Listen for messages from the iframe
+            window.addEventListener('message', function(event) {
+              if (event.origin !== window.location.origin) return;
+
+              if (event.data === 'export-complete') {
+                spinner.style.display = 'none';
+                message.style.display = 'none';
+                container.style.display = 'block';
+              } else if (event.data === 'export-error') {
+                message.innerHTML = 'Ett fel uppstod vid exporten. Vänligen försök igen.';
+                message.style.color = 'red';
+              }
             });
 
-            // Fallback: if iframe doesn't load within 30 seconds, show error
+            // Fallback: if no response within 30 seconds, show error
             setTimeout(function() {
               if (container.style.display !== 'block') {
-                message.innerHTML = 'Exporten av <strong>${displayProductNames}</strong> tar lite tid...<br><br>Låt fönstret vara öppet och vänta tills exporten är klar.<br><br>Om du stänger fönstret innan exporten är klar måste du starta om exporten.';
+                message.innerHTML = 'Exporten av <strong>${displayNames}</strong> tar lite tid...<br><br>Låt fönstret vara öppet och vänta tills exporten är klar.<br><br>Om du stänger fönstret innan exporten är klar måste du starta om exporten.';
                 message.style.color = 'none';
               }
             }, 30000);
@@ -342,7 +397,6 @@ const Geouttag = function Geouttag(options = {}) {
         </body>
       </html>
     `;
-
     // Write HTML to the new window using modern approach with Blob
     const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
     const blobUrl = URL.createObjectURL(blob);
@@ -356,26 +410,14 @@ const Geouttag = function Geouttag(options = {}) {
     const geometryType = geometry.getType();
 
     if (geometryType === 'Polygon' && (currentDrawType === 'Polygon')) {
-      coords = geometry.getCoordinates()[0];
-
-      // Get bounding box from any geometry type
+      coords = geometry.getCoordinates()[0]; // any shape
+    } else { // rectangle shape assumed
       const extent = geometry.getExtent();
       x1 = Math.round(extent[0]); // minX
       y1 = Math.round(extent[1]); // minY
       x2 = Math.round(extent[2]); // maxX
       y2 = Math.round(extent[3]); // maxY
 
-      console.log(`Bounding box from ${geometry.getType()}: ${x1}, ${y1}, ${x2}, ${y2}`);
-    } else {
-      const extent = geometry.getExtent();
-      x1 = Math.round(extent[0]); // minX
-      y1 = Math.round(extent[1]); // minY
-      x2 = Math.round(extent[2]); // maxX
-      y2 = Math.round(extent[3]); // maxY
-
-      console.log(`Bounding box from ${geometry.getType()}: ${x1}, ${y1}, ${x2}, ${y2}`);
-
-      // Clear polygon coordinates since we're not using freehand
       coords = null;
     }
   }
@@ -393,10 +435,11 @@ const Geouttag = function Geouttag(options = {}) {
       return new Style({});
     }
 
-    const area = Math.abs(geometry.getArea());
+    const areaKm2 = Math.abs(geometry.getArea()) / 1000000;
+    console.log(`Calculate style, feature geometry area: ${areaKm2} km²`); // hectares
 
     // Choose the base styling based on your business logic
-    const areaStyle = area > warningLimit ? styles.warningStyle : styles.standardInteractionStyle;
+    const areaStyle = areaKm2 > warningLimit ? styles.warningStyle : styles.standardInteractionStyle;
 
     // 3. Combine styles:
     // [defaultEditingStyle] provides the sketch-line feel
@@ -417,6 +460,7 @@ const Geouttag = function Geouttag(options = {}) {
   function selectedStyleFunction(feature) { // the decision on what style bits to employ looks different for the finished feature (select can also influense, why else have a select)
     return calculateStyle(feature, true);
   }
+
   function styleFunction(feature) {
     return calculateStyle(feature, false);
   }
@@ -601,24 +645,17 @@ const Geouttag = function Geouttag(options = {}) {
 
       // projectionCode = map.getView().getProjection();
 
-      const mapLayers = maplayerExport?.layers || [];
+      const mapLayers = layersConf?.layers || [];
 
       try {
-        const customSelectLayerOptions = getMaplayerOptions({
+        const layersSelectLayerOptions = getMaplayerOptions({
           layers: mapLayers
         });
-        customSelectOptionsDropdown.addComponents(customSelectLayerOptions);
+        layersSelectOptionsDropdown.addComponents(layersSelectLayerOptions);
       } catch (e) {
         console.warn('Could not create/attach mapLayerSelect now:', e);
       }
 
-      if (predefinedExports) {
-        predefinedExports.forEach((layer) => {
-          if (layer.restricted) {
-            restrictedLayers.push(layer);
-          }
-        });
-      }
       // if another click interaction like draw is activated, the geouttag tool button should become inactive and its control panel should vanish
       // so should its painted feature
       viewer.on('toggleClickInteraction', (e) => {
@@ -649,20 +686,30 @@ const Geouttag = function Geouttag(options = {}) {
       // These three handlers work together to ensure users can only export when they've
       // made valid selections, and to enforce the rule that users must choose either a predefined product OR map layers, but not both.
 
+      // Selecting a product and selecting layers are mutually exclusive:
+      // choosing one clears the other's selection.
+      function clearSelectedLayers() {
+        selectedLayers = [];
+        mapLayerOptionElements.forEach((optionElement) => optionElement.classList.remove('selected'));
+        const selectedOptions = document.getElementById(layersSelectSelectedOptions.getId());
+        if (selectedOptions) selectedOptions.innerHTML = '';
+      }
+
       const productSelectElement = document.getElementById(productSelect.getId());
       productSelectElement.addEventListener('change', (productSelectEvent) => {
         const selectedValue = productSelectEvent.target.value;
-        const customSelectEl = document.getElementById(customSelectInput.getId());
+        const layersSelectEl = document.getElementById(layersSelectInput.getId());
         if (selectedValue !== 'defaultSelectionValue') {
-          setFiletypes({ selValue: selectedValue });
-          customSelectEl.disabled = true;
-          customSelectEl.classList.add('disabled');
+          clearSelectedLayers();
+          setFiletypes({ filetypes: productFiletypesByName[selectedValue] });
+          layersSelectEl.disabled = true;
+          layersSelectEl.classList.add('disabled');
         } else {
-          if (getMapLayersExist()) {
-            customSelectEl.disabled = false;
-            customSelectEl.classList.remove('disabled');
+          if (getConfiguredLayersExist()) {
+            layersSelectEl.disabled = false;
+            layersSelectEl.classList.remove('disabled');
           }
-          setFiletypes({ mapLayerOutputFormats: [] });
+          setFiletypes();
         }
         updateExportButtonState();
       });
@@ -675,7 +722,7 @@ const Geouttag = function Geouttag(options = {}) {
       const exportBtnElement = document.getElementById(exportBtn.getId());
       if (exportBtnElement && !exportBtnElement.dataset.listenerAttached) {
         exportBtnElement.addEventListener('click', async () => {
-          const selectedProduct = predefinedExports.find((p) => p.name === productSelectElement?.value);
+          const selectedProduct = products.find((p) => p.name === productSelectElement?.value);
           const isRaster = selectedProduct && selectedProduct.imageServer;
 
           if (isRaster) {
@@ -699,16 +746,16 @@ const Geouttag = function Geouttag(options = {}) {
         exportBtnElement.dataset.listenerAttached = 'true';
       }
 
-      document.getElementById(customSelectInput.getId()).addEventListener('click', () => {
-        const optionsDropdownEl = document.getElementById(customSelectOptionsDropdown.getId());
-        const inputEl = document.getElementById(customSelectInput.getId());
+      document.getElementById(layersSelectInput.getId()).addEventListener('click', () => {
+        const optionsDropdownEl = document.getElementById(layersSelectOptionsDropdown.getId());
+        const inputEl = document.getElementById(layersSelectInput.getId());
         if (!optionsDropdownEl || !inputEl) return;
         const rect = inputEl.getBoundingClientRect();
         if (optionsDropdownEl.style.display === 'block') {
           optionsDropdownEl.style.display = 'none';
-          const customSelectEl = document.getElementById(customSelect.getId());
-          if (customSelectEl && customSelectEl.contains(optionsDropdownEl) === false) {
-            customSelectEl.appendChild(optionsDropdownEl);
+          const layersSelectEl = document.getElementById(layersSelect.getId());
+          if (layersSelectEl && layersSelectEl.contains(optionsDropdownEl) === false) {
+            layersSelectEl.appendChild(optionsDropdownEl);
           }
         } else {
           optionsDropdownEl.style.position = 'absolute';
@@ -721,9 +768,9 @@ const Geouttag = function Geouttag(options = {}) {
         }
       });
 
-      document.getElementById(customSelectInput.getId()).addEventListener('input', (e) => {
-        const optionsDropdownEl = document.getElementById(customSelectOptionsDropdown.getId());
-        const inputEl = document.getElementById(customSelectInput.getId());
+      document.getElementById(layersSelectInput.getId()).addEventListener('input', (e) => {
+        const optionsDropdownEl = document.getElementById(layersSelectOptionsDropdown.getId());
+        const inputEl = document.getElementById(layersSelectInput.getId());
         if (!optionsDropdownEl || !inputEl) return;
         const rect = inputEl.getBoundingClientRect();
         if (optionsDropdownEl.style.display !== 'block') {
@@ -738,7 +785,7 @@ const Geouttag = function Geouttag(options = {}) {
         filterCustomOptions(e.target.value);
       });
 
-      mapLayerOptionElements = customSelectOptionsDropdown.getComponents().map((component) => document.getElementById(component.getId()));
+      mapLayerOptionElements = layersSelectOptionsDropdown.getComponents().map((component) => document.getElementById(component.getId()));
       const mapLayerOptions = mapLayerOptionElements;
 
       // eventlisteners behövs för varje option samt dess tagg
@@ -748,12 +795,12 @@ const Geouttag = function Geouttag(options = {}) {
           const layerTitle = mapLayerOption.getAttribute('data-title');
 
           const isSelected = mapLayerOption.classList.toggle('selected');
-          const selectedOptions = document.getElementById(customSelectSelectedOptions.getId());
+          const selectedOptions = document.getElementById(layersSelectSelectedOptions.getId());
           const productSelectElem = document.getElementById(productSelect.getId());
 
           if (isSelected) {
             productSelectElem.disabled = true;
-            selectedValues.push(layerName);
+            selectedLayers.push(layerName);
             const tag = document.createElement('div');
             tag.className = 'selected-tag';
             tag.textContent = layerTitle;
@@ -761,19 +808,19 @@ const Geouttag = function Geouttag(options = {}) {
             tag.addEventListener('click', (closeTagClickEvent) => {
               closeTagClickEvent.stopPropagation();
               mapLayerOption.classList.remove('selected');
-              selectedValues = selectedValues.filter(v => v !== layerName);
-              if (selectedValues.length === 0) {
+              selectedLayers = selectedLayers.filter(v => v !== layerName);
+              if (selectedLayers.length === 0) {
                 productSelectElem.disabled = false;
-                setFiletypes({ mapLayerOutputFormats: [] });
+                setFiletypes();
               }
               tag.remove();
             });
             selectedOptions.append(tag);
           } else {
-            selectedValues = selectedValues.filter(v => v !== layerName);
-            if (selectedValues.length === 0) {
+            selectedLayers = selectedLayers.filter(v => v !== layerName);
+            if (selectedLayers.length === 0) {
               productSelectElem.disabled = false;
-              setFiletypes({ mapLayerOutputFormats: [] });
+              setFiletypes();
             }
             const tags = selectedOptions.querySelectorAll('.selected-tag');
             tags.forEach(tag => {
@@ -782,14 +829,14 @@ const Geouttag = function Geouttag(options = {}) {
               }
             });
           }
-          if (selectedValues.length > 0) setFiletypes({ mapLayerOutputFormats: maplayerExport.filetypes });
+          if (selectedLayers.length > 0) setFiletypes({ filetypes: layerFiletypes });
           updateExportButtonState();
         });
       });
 
       // eventlistener behövs för att ta bort rullgardin vid klick utanför i custom select
       document.addEventListener('click', (forDropdownEvent) => {
-        const optionsEl = document.getElementById(customSelectOptionsDropdown.getId());
+        const optionsEl = document.getElementById(layersSelectOptionsDropdown.getId());
         if (forDropdownEvent.target.closest('.custom-select') || (optionsEl?.contains(forDropdownEvent.target))) return;
         if (optionsEl) optionsEl.style.display = 'none';
       });
@@ -816,31 +863,31 @@ const Geouttag = function Geouttag(options = {}) {
     },
 
     onInit() {
-      customSelectSelectedOptions = Origo.ui.Element({
+      layersSelectSelectedOptions = Origo.ui.Element({
         tagName: 'div',
         cls: 'selected-options'
       });
 
-      customSelectInput = Origo.ui.Element({
+      layersSelectInput = Origo.ui.Element({
         tagName: 'input',
         attributes: {
           type: 'text',
-          placeholder: getMapLayersExist() ? 'Välj kartlager..' : 'Inga tillgängliga kartlager',
-          disabled: !(getMapLayersExist())
+          placeholder: getConfiguredLayersExist() ? 'Välj kartlager..' : 'Inga tillgängliga kartlager',
+          disabled: !(getConfiguredLayersExist())
         },
-        cls: `select-input custom-select-input text-small ${(getMapLayersExist()) ? '' : 'disabled'}`
+        cls: `select-input custom-select-input text-small ${(getConfiguredLayersExist()) ? '' : 'disabled'}`
       });
 
-      customSelectOptionsDropdown = Origo.ui.Element({
+      layersSelectOptionsDropdown = Origo.ui.Element({
         tagName: 'div',
         cls: 'options-dropdown',
         style: 'display:none'
       });
 
-      customSelect = Origo.ui.Element({
+      layersSelect = Origo.ui.Element({
         tagName: 'div',
         cls: 'custom-select',
-        components: [customSelectOptionsDropdown, customSelectInput]
+        components: [layersSelectOptionsDropdown, layersSelectInput]
       });
 
       geouttagButton = Origo.ui.Button({
@@ -868,7 +915,7 @@ const Geouttag = function Geouttag(options = {}) {
         tagName: 'select',
         cls: 'text-small',
         innerHTML: getSelectOptionsHtml({
-          selectOptions: predefinedExports,
+          selectOptions: products,
           defaultNothing: {
             title: 'Välj en produkt..',
             name: 'defaultSelectionValue'
@@ -966,7 +1013,7 @@ const Geouttag = function Geouttag(options = {}) {
           width: '25rem',
           'z-index': '-1'
         },
-        components: [headerComp, productSelectorTextComp, productSelect, customSelect, additionalLayersTextComp, customSelectSelectedOptions, formatSelectorTextComp, fileTypeSelect, drawToolSelectorTextComp, drawToolbarComp, exportBtn, authSeparator, userInfoComp, signOutBtn]
+        components: [headerComp, productSelectorTextComp, productSelect, layersSelect, additionalLayersTextComp, layersSelectSelectedOptions, formatSelectorTextComp, fileTypeSelect, drawToolSelectorTextComp, drawToolbarComp, exportBtn, authSeparator, userInfoComp, signOutBtn]
       });
 
       // Ensure controlContainer is registered as a child component so its

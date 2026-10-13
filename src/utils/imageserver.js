@@ -23,12 +23,12 @@ export function handleOAuthCallback() {
   // PKCE flow: authorization code in query string (?code=...)
   if (window.location.search) {
     const match = (window.location.search) ? window.location.search.match(/\?code=([^&]+)/) : false;
-      if (match[1]) {
-          window.opener.oauthCallback(match[1]);
-        }
-      window.close();
+    if (match[1]) {
+      window.opener.oauthCallback(match[1]);
     }
+    window.close();
   }
+}
 
 // ── PKCE helper functions for ArcGIS OAuth 2.0 Authorization Code with PKCE ──
 function dec2hex(dec) {
@@ -466,11 +466,12 @@ const ImageServer = function ImageServer(options = {}) {
         }
         // Implicit grant fallback — authResponse is an object with access_token
         if (authResponse && authResponse.access_token) {
-          if (authResponse.expires_in && !authResponse.expires_at) {
-            authResponse.expires_at = Date.now() + (Number(authResponse.expires_in) * 1000);
+          const responseObj = authResponse;
+          if (responseObj.expires_in && !responseObj.expires_at) {
+            responseObj.expires_at = Date.now() + (Number(authResponse.expires_in) * 1000);
           }
           // See note above — download is triggered by geouttag.js's pendingRasterExport flow.
-          updateAuthUI(authResponse);
+          updateAuthUI(responseObj);
           return;
         }
         console.error('ArcGIS OAuth failed: unrecognized response', authResponse);

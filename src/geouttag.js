@@ -21,6 +21,7 @@ const Geouttag = function Geouttag(options = {}) {
     fmeFlowDataDownloadUrl = '',
     products = [],
     layersConf = {},
+    coordSyses = [],
     drawlayerTitle = '',
     arcgisClientId = import.meta.env.VITE_ARC_GIS_CLIENT_ID || '',
     arcgisTokenEndpoint = import.meta.env.VITE_ARC_GIS_TOKEN_ENDPOINT || ''
@@ -37,6 +38,7 @@ const Geouttag = function Geouttag(options = {}) {
   let exportBtn;
   let productSelect;
   let fileTypeSelect;
+  let coordSysSelect;
   let isActive = false;
   let geouttagButton;
   let arcgisSession = null;
@@ -298,12 +300,17 @@ const Geouttag = function Geouttag(options = {}) {
     }
 
     const requestUrl = new URL(`${fmeFlowDataDownloadUrl}/${filetype.FMEWorkspace}`);
+    const coordSysSelectElement = document.getElementById(coordSysSelect.getId());
+    const crs = coordSysSelectElement && coordSysSelectElement.value
+      ? `EPSG:${coordSysSelectElement.value}`
+      : '';
     const urlEncodedData = new URLSearchParams({
       geom: `POLYGON ${coordinatesString}`,
       srs: 'EPSG:3010',
       outputFormat: filetype.outputFormat,
       token: import.meta.env.VITE_FME_FLOW_TOKEN
     });
+    if (crs) urlEncodedData.append('crs', crs);
     exportNames.forEach((name) => urlEncodedData.append('exportName', name));
 
     const inputsString = Array.from(urlEncodedData.entries())
@@ -972,6 +979,12 @@ const Geouttag = function Geouttag(options = {}) {
         tagName: 'select'
       });
 
+      coordSysSelect = Origo.ui.Element({
+        tagName: 'select',
+        cls: 'text-small',
+        innerHTML: coordSyses.map((epsgCode) => `<option value="${epsgCode}">EPSG:${epsgCode}</option>`).join('')
+      });
+
       headerComp = Origo.ui.Element({
         tagName: 'h3',
         innerHTML: 'GeoUttag',
@@ -992,7 +1005,7 @@ const Geouttag = function Geouttag(options = {}) {
 
       formatSelectorTextComp = Origo.ui.Element({
         tagName: 'p',
-        innerHTML: 'Välj ett exportformat',
+        innerHTML: 'Välj ett exportformat och koordinatsystem',
         cls: 'text-small padding-top-large padding-bottom-small padding-left-small'
       });
 
@@ -1058,7 +1071,7 @@ const Geouttag = function Geouttag(options = {}) {
           width: '25rem',
           'z-index': '-1'
         },
-        components: [headerComp, productSelectorTextComp, productSelect, layersSelect, additionalLayersTextComp, layersSelectSelectedOptions, formatSelectorTextComp, fileTypeSelect, drawToolSelectorTextComp, drawToolbarComp, exportBtn, authSeparator, userInfoComp, signOutBtn]
+        components: [headerComp, productSelectorTextComp, productSelect, layersSelect, additionalLayersTextComp, layersSelectSelectedOptions, formatSelectorTextComp, fileTypeSelect, coordSysSelect, drawToolSelectorTextComp, drawToolbarComp, exportBtn, authSeparator, userInfoComp, signOutBtn]
       });
 
       // Ensure controlContainer is registered as a child component so its

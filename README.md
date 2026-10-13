@@ -108,7 +108,9 @@ The plugin can be loaded like this in an html-file:
             {
               name: "sokvyx_intressepunkter_utescen",
               title: "Utescener",
-              workspace: "etuna"
+              workspace: "etuna",
+              // Optional: exportable in its entirety, without a drawn export area
+              wholeExportable: true
             }
           ]
         }
@@ -126,4 +128,5 @@ The plugin can be loaded like this in an html-file:
 - `outputFormat` is sent as a parameter in the FME Flow request for the workspace to do with as it pleases.
 - `coordSyses` (optional) is an array of EPSG codes (e.g. `["3010", "3006", "4326", "3857", "3021"]`) rendered as a coordinate system dropdown in the UI. The selection is sent to FME Flow as the `crs` parameter (e.g. `crs=EPSG:3006`). When omitted, no dropdown is shown and no `crs` parameter is sent.
 - `maxArea` (optional, km²) may be declared per product and per layer to cap the exportable area. When several layers are selected, the smallest `maxArea` among them applies. While no product or layer is selected, no area limit is applied. An area exceeding the limit is warning-styled while sketching and stays warning-styled once the sketch is finished, and the export button stays disabled.
+- `wholeExportable` (optional, boolean) may be declared per product (not for `imageServer` products, for which it is disregarded) and per layer to mark an export that can be delivered in its entirety, without a drawn geometry defining an export area. When every selected item is `wholeExportable`, the export button can be enabled without a sketch, and the export is posted without a `geom` parameter. A `wholeExportable` layer that is exported together with layers that need a geometry is cut by the drawn geometry just like everything else.
 - The FME Flow token is read from the `VITE_FME_FLOW_TOKEN` environment variable at build time (see `.env.example`).

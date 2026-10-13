@@ -217,6 +217,25 @@ const Geouttag = function Geouttag(options = {}) {
     });
   }
 
+  /* True when every exported item is a whole-exportable product/layer, i.e.
+     one that can be exported in its entirety without a drawn geometry. */
+  function isWholeExportableSelection() {
+    const productSelectElement = document.getElementById(productSelect.getId());
+    if (selectedLayers.length > 0) {
+      return selectedLayers.every((name) => {
+        const layer = layersConf.layers?.find((l) => l.name === name);
+        return !!layer && layer.wholeExportable === true;
+      });
+    }
+    if (productSelectElement.value && productSelectElement.value !== 'defaultSelectionValue') {
+      const product = products.find((p) => p.name === productSelectElement.value);
+      // imageServer products cannot be exported in their entirety with this
+      // app, so the wholeExportable prop is disregarded for them
+      return !!product && product.wholeExportable === true && !product.imageServer;
+    }
+    return false;
+  }
+
   /* State for the export button, if it should be enabled or disabled */
   function updateExportButtonState() {
     const exportBtnElement = document.getElementById(exportBtn.getId());
@@ -229,10 +248,23 @@ const Geouttag = function Geouttag(options = {}) {
     const hasFileTypeSelection = !fileTypeSelectElement.disabled
       && fileTypeSelectElement.options.length > 0
       && !!fileTypeSelectElement.value;
-    const drawnFeature = geouttagLayer.getSource().getFeatures()[0];
+    const wholeExportableSelection = isWholeExportableSelection();
+    // The draw layer (and thus any feature) may not exist yet before the
+    // first interaction has been created / the tool first activated.
+    const drawnFeatures = geouttagLayer && typeof geouttagLayer.getSource === 'function'
+      ? geouttagLayer.getSource().getFeatures()
+      : [];
+    const drawnFeature = drawnFeatures[0];
     const hasOkArea = !!drawnFeature
       && Math.abs(drawnFeature.getGeometry().getArea()) / 1000000 < getCurrentMaxAreaKm2();
-    const exportReady = (hasProductSelection || hasMapLayerSelection) && hasFileTypeSelection && hasOkArea;
+    const geometryOk = wholeExportableSelection || !!drawnFeature;
+    // When a geometry is drawn it must be within the applicable maxArea,
+    // also for a whole-exportable selection — such items then get cut by
+    // the drawn geometry just like everything else.
+    const exportReady = (hasProductSelection || hasMapLayerSelection)
+      && hasFileTypeSelection
+      && geometryOk
+      && (!drawnFeature || hasOkArea);
     exportBtnElement.disabled = !exportReady;
   }
 
@@ -323,10 +355,12 @@ const Geouttag = function Geouttag(options = {}) {
     } else if (x1 !== undefined && y1 !== undefined && x2 !== undefined && y2 !== undefined) {
       // Use bounding box for other tools
       coordinatesString = `((${x1} ${y1},${x1} ${y2},${x2} ${y2},${x2} ${y1},${x1} ${y1}))`;
-    } else {
+    } else if (!isWholeExportableSelection()) {
       console.error('No coordinates available for export');
       return;
     }
+    // A whole-exportable selection may be exported without a geometry; in
+    // that case no geom parameter is sent and the whole dataset is exported.
 
     const requestUrl = new URL(`${fmeFlowDataDownloadUrl}/${filetype.FMEWorkspace}`);
     const coordSysSelectElement = document.getElementById(coordSysSelect.getId());
@@ -334,10 +368,10 @@ const Geouttag = function Geouttag(options = {}) {
       ? `EPSG:${coordSysSelectElement.value}`
       : '';
     const urlEncodedData = new URLSearchParams({
-      geom: `POLYGON ${coordinatesString}`,
       outputFormat: filetype.outputFormat,
       token: import.meta.env.VITE_FME_FLOW_TOKEN
     });
+    if (coordinatesString) urlEncodedData.append('geom', `POLYGON ${coordinatesString}`);
     if (crs) urlEncodedData.append('crs', crs);
     exportNames.forEach((name) => urlEncodedData.append('exportName', name));
 
@@ -562,7 +596,6 @@ const Geouttag = function Geouttag(options = {}) {
       drawHandler.setGeouttagLayer(geouttagLayer);
     } else {
       layer = geouttagLayer;
-      layer.getSource().clear();
     }
 
     let drawInteraction;
@@ -614,9 +647,11 @@ const Geouttag = function Geouttag(options = {}) {
     currentDrawType = toolType;
 
     // Only change the interaction if geouttag is currently active
-    if (isActive && geouttag) {
-      // Remove current interaction
-      map.removeInteraction(geouttag);
+    if (isActive) {
+      // Remove current interaction, if one has been created
+      if (geouttag) {
+        map.removeInteraction(geouttag);
+      }
       // Clear any existing features so export state sees no selection
       try {
         if (geouttagLayer && geouttagLayer.getSource) {
@@ -641,7 +676,9 @@ const Geouttag = function Geouttag(options = {}) {
 
   function removeGeouttag() {
     document.getElementById(controlContainer.getId()).classList.add('o-hidden');
-    geouttagLayer.getSource().clear();
+    if (geouttagLayer && typeof geouttagLayer.getSource === 'function') {
+      geouttagLayer.getSource().clear();
+    }
   }
 
   function toggleGeouttag() {
@@ -688,14 +725,18 @@ const Geouttag = function Geouttag(options = {}) {
   }
 
   function enableInteraction() {
-    map.addInteraction(geouttag);
+    // A draw interaction exists only after one of the draw tool radios has
+    // been selected (nothing is added to the map on plugin load)
+    if (geouttag) {
+      map.addInteraction(geouttag);
+    }
     document.getElementById(geouttagButton.getId()).classList.add('active');
     document.getElementById(geouttagButton.getId()).classList.remove('tooltip');
     setActive(true);
   }
 
   function disableInteraction() {
-    map.removeInteraction(geouttag);
+    if (geouttag) map.removeInteraction(geouttag);
     document.getElementById(geouttagButton.getId()).classList.remove('active');
     document.getElementById(geouttagButton.getId()).classList.add('tooltip');
     setActive(false);
@@ -813,15 +854,13 @@ const Geouttag = function Geouttag(options = {}) {
       polygonSelectionButton = Origo.ui.Button({
         cls: 'light text-smaller padding-left-large',
         style: 'flex: 1 1 auto;',
-        text: getString('polygonText'),
-        state: 'active'
+        text: getString('polygonText')
       });
 
       squareSelectionButton = Origo.ui.Button({
         cls: 'light text-smaller',
         style: 'flex: 1 1 auto;',
-        text: getString('squareText'),
-        state: 'initial'
+        text: getString('squareText')
       });
 
       rectangleSelectionButton = Origo.ui.Button({
@@ -906,12 +945,14 @@ const Geouttag = function Geouttag(options = {}) {
         }
       });
 
-      geouttag = makeDrawInteraction();
+      geouttag = null;
 
       drawToolButtonEvents();
 
       viewer.on('toggleClickInteraction', (detail) => {
         if (detail.name === 'geouttag' && detail.active) {
+          // The tool is enabled without a draw interaction; the user picks
+          // one of the draw tool radios (changeDrawTool) to start drawing
           enableInteraction();
         } else {
           disableInteraction();

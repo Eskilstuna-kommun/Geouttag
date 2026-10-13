@@ -25,12 +25,12 @@ The plugin can be loaded like this in an html-file:
 
       const geouttag = Geouttag({
         fmeFlowDataDownloadUrl: "URL to the FME Flow data download service",
-        warningLimit: 500*500,
-        errorLimit: 2000*2000,
         products: [ // "products" are sometimes a combination of spatial tables and related data, and can have their own output file formats and FME workspaces
           {
             name: "base",
             title: "Base map",
+            // Optional max exportable area in km2; the sketch is warning-styled when exceeded
+            maxArea: 100,
             FMEWorkspace: "basemap.fmw",
             filetypes: [
               {
@@ -95,7 +95,9 @@ The plugin can be loaded like this in an html-file:
             {
               name: "sokvyx_intressepunkter_kff_ok_bibliotek",
               title: "Bibliotek",
-              workspace: "etuna"
+              workspace: "etuna",
+              // Optional max exportable area in km2
+              maxArea: 25
             },
             {
               name: "sokvyx_intressepunkter_utescen",
@@ -116,4 +118,5 @@ The plugin can be loaded like this in an html-file:
 - Products declare their own `FMEWorkspace`; all layers share the single `FMEWorkspace` on `layersConf`.
 - Each selected product or layer is posted to the workspace as an `exportName` parameter, one parameter per item.
 - `outputFormat` is sent as a parameter in the FME Flow request for the workspace to do with as it pleases.
+- `maxArea` (optional, km²) may be declared per product and per layer to cap the exportable area. When several layers are selected, the smallest `maxArea` among them applies. While no product or layer is selected, no area limit is applied. An area exceeding the limit is warning-styled while sketching and stays warning-styled once the sketch is finished, and the export button stays disabled.
 - The FME Flow token is read from the `VITE_FME_FLOW_TOKEN` environment variable at build time (see `.env.example`).

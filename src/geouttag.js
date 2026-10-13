@@ -19,8 +19,6 @@ handleOAuthCallback();
 const Geouttag = function Geouttag(options = {}) {
   const {
     fmeFlowDataDownloadUrl = '',
-    warningLimit,
-    errorLimit,
     products = [],
     layersConf = {},
     drawlayerTitle = '',
@@ -150,6 +148,44 @@ const Geouttag = function Geouttag(options = {}) {
     return mapLayersExist;
   }
 
+  /* Returns the maximum exportable area in km2 for the current selection.
+     A selected product contributes its own maxArea. With one or more layers
+     selected, the smallest maxArea among them applies. While nothing is
+     selected, no limit is enforced — the limit is a property of what is
+     exported, which is not known yet. */
+  function parseMaxAreaKm2(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+  }
+
+  function getCurrentMaxAreaKm2() {
+    const productSelectElement = document.getElementById(productSelect.getId());
+    const selectedProduct = productSelectElement
+      ? products.find((product) => product.name === productSelectElement.value)
+      : undefined;
+    if (selectedLayers.length > 0) {
+      const layerMaxAreas = selectedLayers
+        .map((name) => parseMaxAreaKm2(layersConf.layers?.find((layer) => layer.name === name)?.maxArea))
+        .filter((maxArea) => maxArea !== undefined);
+      if (layerMaxAreas.length > 0) return Math.min(...layerMaxAreas);
+    } else {
+      const productMaxArea = parseMaxAreaKm2(selectedProduct?.maxArea);
+      if (productMaxArea !== undefined) return productMaxArea;
+    }
+    return Infinity;
+  }
+
+  /* Forces drawn feature(s) to be re-styled. Needed when the applicable maxArea
+     becomes known only after the feature was drawn, e.g. selecting a product
+     after finishing the sketch: OpenLayers re-evaluates a styleFunction only on
+     feature/render changes, not when a select dropdown changes. */
+  function refreshGeouttagFeatureStyles() {
+    if (!geouttagLayer || typeof geouttagLayer.getSource !== 'function') return;
+    geouttagLayer.getSource().getFeatures().forEach((feature) => {
+      if (typeof feature.changed === 'function') feature.changed();
+    });
+  }
+
   /* State for the export button, if it should be enabled or disabled */
   function updateExportButtonState() {
     const exportBtnElement = document.getElementById(exportBtn.getId());
@@ -162,7 +198,9 @@ const Geouttag = function Geouttag(options = {}) {
     const hasFileTypeSelection = !fileTypeSelectElement.disabled
       && fileTypeSelectElement.options.length > 0
       && !!fileTypeSelectElement.value;
-    const hasOkArea = geouttagLayer.getSource().getFeatures()[0]?.getGeometry().getArea() < warningLimit;
+    const drawnFeature = geouttagLayer.getSource().getFeatures()[0];
+    const hasOkArea = !!drawnFeature
+      && Math.abs(drawnFeature.getGeometry().getArea()) / 1000000 < getCurrentMaxAreaKm2();
     const exportReady = (hasProductSelection || hasMapLayerSelection) && hasFileTypeSelection && hasOkArea;
     exportBtnElement.disabled = !exportReady;
   }
@@ -436,10 +474,14 @@ const Geouttag = function Geouttag(options = {}) {
     }
 
     const areaKm2 = Math.abs(geometry.getArea()) / 1000000;
-    console.log(`Calculate style, feature geometry area: ${areaKm2} km²`); // hectares
+
+    // The maximum allowed area depends on what is currently selected for export
+    const maxAreaKm2 = getCurrentMaxAreaKm2();
+    const maxAreaLog = maxAreaKm2 === Infinity ? 'none (no product/layers selected)' : `${maxAreaKm2} km²`;
+    console.log(`Calculate style, feature geometry area: ${areaKm2} km² (max allowed: ${maxAreaLog})`);
 
     // Choose the base styling based on your business logic
-    const areaStyle = areaKm2 > warningLimit ? styles.warningStyle : styles.standardInteractionStyle;
+    const areaStyle = areaKm2 > maxAreaKm2 ? styles.warningStyle : styles.standardInteractionStyle;
 
     // 3. Combine styles:
     // [defaultEditingStyle] provides the sketch-line feel
@@ -634,8 +676,6 @@ const Geouttag = function Geouttag(options = {}) {
         stylewindow: null,
         pointerMoveHandler,
         Origo,
-        warningLimit,
-        errorLimit,
         updateExportButtonState,
         selectedStyleFunction,
         styleFunction
@@ -693,6 +733,7 @@ const Geouttag = function Geouttag(options = {}) {
         mapLayerOptionElements.forEach((optionElement) => optionElement.classList.remove('selected'));
         const selectedOptions = document.getElementById(layersSelectSelectedOptions.getId());
         if (selectedOptions) selectedOptions.innerHTML = '';
+        refreshGeouttagFeatureStyles();
       }
 
       const productSelectElement = document.getElementById(productSelect.getId());
@@ -711,6 +752,7 @@ const Geouttag = function Geouttag(options = {}) {
           }
           setFiletypes();
         }
+        refreshGeouttagFeatureStyles();
         updateExportButtonState();
       });
 
@@ -813,6 +855,8 @@ const Geouttag = function Geouttag(options = {}) {
                 productSelectElem.disabled = false;
                 setFiletypes();
               }
+              refreshGeouttagFeatureStyles();
+              updateExportButtonState();
               tag.remove();
             });
             selectedOptions.append(tag);
@@ -830,6 +874,7 @@ const Geouttag = function Geouttag(options = {}) {
             });
           }
           if (selectedLayers.length > 0) setFiletypes({ filetypes: layerFiletypes });
+          refreshGeouttagFeatureStyles();
           updateExportButtonState();
         });
       });

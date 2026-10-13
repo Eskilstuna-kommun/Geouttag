@@ -1,0 +1,33 @@
+{
+    "geouttag": {
+        "mainButtonTooltipText": "Geouttag",
+        "title": "GeoUttag",
+        "selectMapLayerPlaceholder": "Choose layer..",
+        "noMapLayersText": "No available layers",
+        "startExportText": "Start export",
+        "selectProductText": "Choose a product..",
+        "productSelectorText": "Choose a product or one or several layers",
+        "additionalLayersText": "Can't find what you are looking for?<br>E-mail <a href='mailto:gissupport@eskilstuna.se'>gissupport@eskilstuna.se",
+        "formatSelectorText": "Choose an export file format and a coordinate system",
+        "drawToolSelectorText": "Choose a tool to define the area to export",
+        "polygonText": "polygon",
+        "squareText": "square",
+        "rectangleText": "rectangle",
+        "signOutText": "Log out from ArcGIS Portla",
+        "drawLayerTitle": "SelectionLayer!",
+        "exportWindowTitle": "Exporting data...",
+        "popupBlockedExportAlertText": "Failed to open export window. Please make sure popups are not blocked.",
+        "waitingForExportText": "Waiting for the export of <strong>{0}</strong> från FME Flow...<br><br>Let the window remain and wait until the export finishes.<br><br>If you close the window before the export is complete it must be redone.",
+        "exportStillRunningText": "The export of  <strong>{0}</strong> is taking some time...<br><br>Let the window remain and wait until the export finishes.<br><br>If you close the window before the export is complete then it must be redone.",
+        "exportErrorText": "An error occured during export, please try again.",
+        "popupBlockedDownloadAlertText": "Failed to open download window. Please make sure popups are not blocked..",
+        "downloadingRasterTitle": "Downloading raster...",
+        "downloadingRasterText": "Downloading raster from imageserver...",
+        "creatingZipText": "Creating a zip file once the download finishes",
+        "rasterDownloadTitle": "Raster download",
+        "rasterDownloadSuccessText": "Raster download succeeded",
+        "downloadZipText": "Download ZIP",
+        "rasterDownloadNoteText": "Export from Geouttag - ArcGIS Image Server",
+        "arcgisSessionExpiredText": "The ArcGIS Portal session has expired or is invalid. Please login again. ({0})"
+    }
+}

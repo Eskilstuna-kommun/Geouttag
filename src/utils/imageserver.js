@@ -20,13 +20,15 @@ export function handleOAuthCallback() {
     return;
   }
 
-  // PKCE flow: authorization code in query string (?code=...)
+  // PKCE flow: authorization code in query string (?code=...). Other query
+  // params may be present (e.g. ?loc=sv-SE set by the localization control),
+  // so the code matcher must run on its own and never assume a match.
   if (window.location.search) {
-    const match = (window.location.search) ? window.location.search.match(/\?code=([^&]+)/) : false;
-    if (match[1]) {
+    const match = window.location.search.match(/[?&]code=([^&]+)/);
+    if (match && match[1]) {
       window.opener.oauthCallback(match[1]);
+      window.close();
     }
-    window.close();
   }
 }
 
@@ -80,7 +82,8 @@ const ImageServer = function ImageServer(options = {}) {
     y1,
     x2,
     y2,
-    onInvalidSession
+    onInvalidSession,
+    getString
   } = options;
 
   // Helper to open ArcGIS OAuth popup (Authorization Code with PKCE)
@@ -180,6 +183,7 @@ const ImageServer = function ImageServer(options = {}) {
     }
 
     const token = session.access_token;
+    let sessionExpired = false;
 
     // Build the base ImageServer download URL (use f=json to get individual file URLs)
     const jsonUrl = `https://geo.eskilstuna.se/imageserver/rest/services/${selectedProduct.name}/ImageServer/download?rasterIds=1&geometry=${encodeURIComponent(geometry)}&geometryType=${geometryType}&format=${selectedFormat}&f=json&token=${token}`;
@@ -197,8 +201,9 @@ const ImageServer = function ImageServer(options = {}) {
           const errorMessage = data.error.message || 'ArcGIS returned an error';
           if (errorCode === 498 || errorCode === 499 || /invalid token|token required/i.test(errorMessage)) {
             localStorage.removeItem('__ARCGIS_USER_SESSION__');
+            sessionExpired = true;
             if (onInvalidSession) onInvalidSession();
-            throw new Error(`ArcGIS-sessionen har gått ut eller är ogiltig. Logga in igen och försök exportera på nytt. (${errorMessage})`);
+            throw new Error(getString('arcgisSessionExpiredText').replace('{0}', errorMessage));
           }
           throw new Error(errorMessage);
         }
@@ -229,7 +234,7 @@ const ImageServer = function ImageServer(options = {}) {
         // Open a progress window
         const downloadWindow = window.open('', '_blank');
         if (!downloadWindow) {
-          alert('Kunde inte öppna nedladdningsfönstret. Kontrollera att popup-blockerare är avstängd för denna sida.');
+          alert(getString('popupBlockedDownloadAlertText'));
           return;
         }
 
@@ -239,7 +244,7 @@ const ImageServer = function ImageServer(options = {}) {
           <html lang="sv">
             <head>
               <meta charset="UTF-8">
-              <title>Laddar ner raster...</title>
+              <title>${getString('downloadingRasterTitle')}</title>
               <style>
                 * { margin: 0; padding: 0; box-sizing: border-box; }
                 body {
@@ -264,8 +269,8 @@ const ImageServer = function ImageServer(options = {}) {
             </head>
             <body>
               <div class="spinner"></div>
-              <p>Laddar ner raster från imageserver...</p>
-              <p class="progress-text">Skapar ZIP-fil när nedladdningen är klar</p>
+              <p>${getString('downloadingRasterText')}</p>
+              <p class="progress-text">${getString('creatingZipText')}</p>
             </body>
           </html>
         `);
@@ -323,7 +328,7 @@ const ImageServer = function ImageServer(options = {}) {
             <head>
               <meta charset="UTF-8">
               <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <title>Raster nedladdning</title>
+              <title>${getString('rasterDownloadTitle')}</title>
               <style>
                 * { margin: 0; padding: 0; box-sizing: border-box; }
                 body {
@@ -372,17 +377,17 @@ const ImageServer = function ImageServer(options = {}) {
             </head>
             <body>
               <div class="container">
-                <h1>Nedladdning av raster lyckades</h1>
+                <h1>${getString('rasterDownloadSuccessText')}</h1>
 
                 <a href="${zipBlobUrl}" download="${zipFileName}" class="download-button" id="download-zip-btn">
-                  Ladda ner ZIP
+                  ${getString('downloadZipText')}
                 </a>
 
                 <ul class="file-list">
                   ${fileListHtml}
                 </ul>
 
-                <p class="note">Export från GeoUttag — ArcGIS ImageServer</p>
+                <p class="note">${getString('rasterDownloadNoteText')}</p>
               </div>
             </body>
           </html>`
@@ -396,14 +401,14 @@ const ImageServer = function ImageServer(options = {}) {
         // If the session was invalid/expired, onInvalidSession() above already cleared it and
         // kicked off a fresh sign-in — opening the fallback link would just hit the same expired
         // token and fail again, so skip it in that case.
-        if (/gått ut eller är ogiltig/.test(error.message)) {
+        if (sessionExpired) {
           return;
         }
         // Fallback: open the HTML page directly
         const fallbackUrl = jsonUrl.replace('f=json', 'f=html');
         const fallbackWindow = window.open(fallbackUrl, '_blank');
         if (!fallbackWindow) {
-          alert('Kunde inte öppna nedladdningsfönstret. Kontrollera att popup-blockerare är avstängd för denna sida.');
+          alert(getString('popupBlockedDownloadAlertText'));
         }
       });
   }

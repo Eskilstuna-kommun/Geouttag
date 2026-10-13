@@ -1,4 +1,6 @@
-const { Style, Fill, Stroke, Text, Circle } = Origo.ol.style;
+const {
+  Style, Fill, Stroke, Text, Circle
+} = Origo.ol.style;
 
 const styleComponents = {
   standardInteractionText: 'Area att exportera',

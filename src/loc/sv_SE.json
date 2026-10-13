@@ -1,0 +1,33 @@
+{
+    "geouttag": {
+        "mainButtonTooltipText": "Geouttag",
+        "title": "GeoUttag",
+        "selectMapLayerPlaceholder": "Välj kartlager..",
+        "noMapLayersText": "Inga tillgängliga kartlager",
+        "startExportText": "Starta export",
+        "selectProductText": "Välj en produkt..",
+        "productSelectorText": "Välj en produkt eller ett till flera lager i kartan",
+        "additionalLayersText": "Syns inte lagret du önskar, saknar du något?<br>Mejla <a href='mailto:gissupport@eskilstuna.se'>gissupport@eskilstuna.se",
+        "formatSelectorText": "Välj ett exportformat och koordinatsystem",
+        "drawToolSelectorText": "Välj ett verktyg för att rita önskat område att exportera",
+        "polygonText": "polygon",
+        "squareText": "kvadrat",
+        "rectangleText": "rektangel",
+        "signOutText": "Logga ut från ArcGIS Portal",
+        "drawLayerTitle": "Urvalsyta!",
+        "exportWindowTitle": "Exporterar data...",
+        "popupBlockedExportAlertText": "Kunde inte öppna exportfönstret. Kontrollera att popup-blockerare är avstängd för denna sida.",
+        "waitingForExportText": "Väntar på export av <strong>{0}</strong> från FME Flow...<br><br>Låt fönstret vara öppet och vänta tills exporten är klar.<br><br>Om du stänger fönstret innan exporten är klar måste du starta om exporten.",
+        "exportStillRunningText": "Exporten av <strong>{0}</strong> tar lite tid...<br><br>Låt fönstret vara öppet och vänta tills exporten är klar.<br><br>Om du stänger fönstret innan exporten är klar måste du starta om exporten.",
+        "exportErrorText": "Ett fel uppstod vid exporten. Vänligen försök igen.",
+        "popupBlockedDownloadAlertText": "Kunde inte öppna nedladdningsfönstret. Kontrollera att popup-blockerare är avstängd för denna sida.",
+        "downloadingRasterTitle": "Laddar ner raster...",
+        "downloadingRasterText": "Laddar ner raster från imageserver...",
+        "creatingZipText": "Skapar ZIP-fil när nedladdningen är klar",
+        "rasterDownloadTitle": "Raster nedladdning",
+        "rasterDownloadSuccessText": "Nedladdning av raster lyckades",
+        "downloadZipText": "Ladda ner ZIP",
+        "rasterDownloadNoteText": "Export från GeoUttag — ArcGIS ImageServer",
+        "arcgisSessionExpiredText": "ArcGIS-sessionen har gått ut eller är ogiltig. Logga in igen och försök exportera på nytt. ({0})"
+    }
+}

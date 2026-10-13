@@ -4,6 +4,8 @@ import loadSVGs from './loadresources';
 import GeouttagDrawHandler from './drawhandler';
 import styles from './styles';
 import ImageServer, { handleOAuthCallback, isArcGISSessionValid } from './utils/imageserver';
+import svLocale from './loc/sv_SE.json';
+import enLocale from './loc/en_US.json';
 
 const Draw = Origo.ol.interaction.Draw;
 // const createBox = Origo.ol.interaction.Draw.createBox;
@@ -66,9 +68,35 @@ const Geouttag = function Geouttag(options = {}) {
   let userInfoComp;
   const filetypesById = {};
   let pendingRasterExport = false;
-  const restrictedLayers = [];
+  let localizationControl = null;
 
   loadSVGs();
+
+  // Registers the plugin's strings with Origo's localization control so they can be
+  // translated or overridden per map and user (see https://origo-map.github.io/origo-documentation/latest/#add-locales).
+  // If the map has no localization control, getString() falls back to the bundled sv_SE.json.
+  function initLocalization(targetViewer) {
+    if (localizationControl) return;
+    try {
+      localizationControl = targetViewer.getControlByName('localization');
+      if (localizationControl && typeof localizationControl.addPluginToLocale === 'function') {
+        localizationControl.addPluginToLocale('sv-SE', svLocale);
+        localizationControl.addPluginToLocale('en-US', enLocale);
+      } else {
+        localizationControl = null;
+      }
+    } catch (e) {
+      localizationControl = null;
+      console.warn('Could not register Geouttag locale with the localization control:', e);
+    }
+  }
+
+  function getString(key) {
+    if (localizationControl && typeof localizationControl.getStringByKeys === 'function') {
+      return localizationControl.getStringByKeys({ targetParentKey: 'geouttag', targetKey: key });
+    }
+    return svLocale.geouttag[key] || key;
+  }
 
   // Called when an ArcGIS request comes back with a session restored from localStorage that has since expired. Clears the stale session,
   // and re-opens the sign-in popup so the user just has to log in again
@@ -99,6 +127,7 @@ const Geouttag = function Geouttag(options = {}) {
       arcgisTokenEndpoint,
       userInfoComp,
       signOutBtn,
+      getString,
       coords,
       x1,
       y1,
@@ -321,7 +350,7 @@ const Geouttag = function Geouttag(options = {}) {
 
     if (!exportWindow) {
       console.error('Popup blocked! Please allow popups for this site.');
-      alert('Kunde inte öppna exportfönstret. Kontrollera att popup-blockerare är avstängd för denna sida.');
+      alert(getString('popupBlockedExportAlertText'));
       return;
     }
 
@@ -332,7 +361,7 @@ const Geouttag = function Geouttag(options = {}) {
         <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Exporterar data...</title>
+          <title>${getString('exportWindowTitle')}</title>
           <style>
             * {
               margin: 0;
@@ -396,7 +425,7 @@ const Geouttag = function Geouttag(options = {}) {
         </head>
         <body>
           <div class="spinner"></div>
-          <p class="message">Väntar på export av <strong>${displayNames}</strong> från FME Flow...<br><br>Låt fönstret vara öppet och vänta tills exporten är klar.<br><br>Om du stänger fönstret innan exporten är klar måste du starta om exporten.</p>
+          <p class="message">${getString('waitingForExportText').replace('{0}', displayNames)}</p>
 
           <div class="iframe-container" id="iframe-container">
             <iframe id="export-iframe" title="Export"></iframe>
@@ -426,7 +455,7 @@ const Geouttag = function Geouttag(options = {}) {
                 message.style.display = 'none';
                 container.style.display = 'block';
               } else if (event.data === 'export-error') {
-                message.innerHTML = 'Ett fel uppstod vid exporten. Vänligen försök igen.';
+                message.innerHTML = '${getString('exportErrorText')}';
                 message.style.color = 'red';
               }
             });
@@ -434,7 +463,7 @@ const Geouttag = function Geouttag(options = {}) {
             // Fallback: if no response within 30 seconds, show error
             setTimeout(function() {
               if (container.style.display !== 'block') {
-                message.innerHTML = 'Exporten av <strong>${displayNames}</strong> tar lite tid...<br><br>Låt fönstret vara öppet och vänta tills exporten är klar.<br><br>Om du stänger fönstret innan exporten är klar måste du starta om exporten.';
+                message.innerHTML = '${getString('exportStillRunningText').replace('{0}', displayNames)}';
                 message.style.color = 'none';
               }
             }, 30000);
@@ -521,7 +550,7 @@ const Geouttag = function Geouttag(options = {}) {
     if (!geouttagLayer) {
       layer = new VectorLayer({
         source: new VectorSource(),
-        title: drawlayerTitle || 'Urvalsyta!',
+        title: drawlayerTitle || getString('drawLayerTitle'),
         type: 'GEOJSON',
         drawlayer: true,
         zIndex: 7,
@@ -678,6 +707,171 @@ const Geouttag = function Geouttag(options = {}) {
     onAdd(evt) {
       viewer = evt.target;
       map = viewer.getMap();
+
+      initLocalization(viewer);
+
+      layersSelectSelectedOptions = Origo.ui.Element({
+        tagName: 'div',
+        cls: 'selected-options'
+      });
+
+      layersSelectInput = Origo.ui.Element({
+        tagName: 'input',
+        attributes: {
+          type: 'text',
+          placeholder: getConfiguredLayersExist() ? getString('selectMapLayerPlaceholder') : getString('noMapLayersText'),
+          disabled: !(getConfiguredLayersExist())
+        },
+        cls: `select-input custom-select-input text-small ${(getConfiguredLayersExist()) ? '' : 'disabled'}`
+      });
+
+      layersSelectOptionsDropdown = Origo.ui.Element({
+        tagName: 'div',
+        cls: 'options-dropdown',
+        style: 'display:none'
+      });
+
+      layersSelect = Origo.ui.Element({
+        tagName: 'div',
+        cls: 'custom-select',
+        components: [layersSelectOptionsDropdown, layersSelectInput]
+      });
+
+      geouttagButton = Origo.ui.Button({
+        cls: 'padding-small margin-bottom-smaller icon-smaller round light box-shadow tooltip',
+        click() {
+          toggleGeouttag();
+        },
+        icon: '#geouttag_ic_download_24px',
+        tooltipText: getString('mainButtonTooltipText'),
+        tooltipPlacement: 'east'// ,
+        // state: 'disabled' - funkar
+      });
+
+      exportBtn = Origo.ui.Element({
+        tagName: 'button',
+        cls: 'export-btn light box-shadow',
+        style: 'margin-top: 1.3rem; width: 30%',
+        attributes: {
+          disabled: true
+        },
+        innerHTML: getString('startExportText')
+      });
+
+      productSelect = Origo.ui.Element({
+        tagName: 'select',
+        cls: 'text-small',
+        innerHTML: getSelectOptionsHtml({
+          selectOptions: products,
+          defaultNothing: {
+            title: getString('selectProductText'),
+            name: 'defaultSelectionValue'
+          }
+        })
+      });
+
+      fileTypeSelect = Origo.ui.Element({
+        tagName: 'select'
+      });
+
+      coordSysSelect = Origo.ui.Element({
+        tagName: 'select',
+        cls: 'text-small',
+        innerHTML: coordSyses.map((epsgCode) => `<option value="${epsgCode}">EPSG:${epsgCode}</option>`).join('')
+      });
+
+      headerComp = Origo.ui.Element({
+        tagName: 'h3',
+        innerHTML: getString('title'),
+        style: 'text-align: center;'
+      });
+
+      productSelectorTextComp = Origo.ui.Element({
+        tagName: 'p',
+        innerHTML: getString('productSelectorText'),
+        cls: 'text-small padding-bottom-small padding-left-small'
+      });
+
+      additionalLayersTextComp = Origo.ui.Element({
+        tagName: 'p',
+        innerHTML: getString('additionalLayersText'),
+        cls: 'text-smaller padding-bottom-small padding-left-small'
+      });
+
+      formatSelectorTextComp = Origo.ui.Element({
+        tagName: 'p',
+        innerHTML: getString('formatSelectorText'),
+        cls: 'text-small padding-top-large padding-bottom-small padding-left-small'
+      });
+
+      drawToolSelectorTextComp = Origo.ui.Element({
+        tagName: 'p',
+        innerHTML: getString('drawToolSelectorText'),
+        cls: 'text-small padding-left-small',
+        style: 'padding-bottom: 0.4rem;'
+      });
+
+      polygonSelectionButton = Origo.ui.Button({
+        cls: 'light text-smaller padding-left-large',
+        style: 'flex: 1 1 auto;',
+        text: getString('polygonText'),
+        state: 'active'
+      });
+
+      squareSelectionButton = Origo.ui.Button({
+        cls: 'light text-smaller',
+        style: 'flex: 1 1 auto;',
+        text: getString('squareText'),
+        state: 'initial'
+      });
+
+      rectangleSelectionButton = Origo.ui.Button({
+        cls: 'light text-smaller padding-right-large',
+        style: 'flex: 1 1 auto;',
+        text: getString('rectangleText')
+      });
+
+      drawToolbarComp = Origo.ui.ToggleGroup({
+        cls: 'flex button-group divider-horizontal rounded-large bg-inverted box-shadow',
+        style: { height: 'fit-content', display: 'flex', width: '75%' }, // width: 75%;
+        components: [polygonSelectionButton, squareSelectionButton, rectangleSelectionButton]
+      });
+
+      // ArcGIS OAuth UI components
+      const authSeparator = Origo.ui.Element({
+        tagName: 'hr',
+        cls: 'separator',
+        style: 'margin: 0.8rem 0; border: none; border-top: 1px solid #ccc;'
+      });
+
+      signOutBtn = Origo.ui.Button({
+        cls: 'light text-smaller padding-left-large padding-right-large',
+        style: 'width: 100%; display: none;',
+        text: getString('signOutText')
+      });
+
+      userInfoComp = Origo.ui.Element({
+        tagName: 'div',
+        cls: 'text-smaller padding-left-small padding-bottom-small',
+        style: 'display: none; font-style: italic;'
+      });
+
+      controlContainer = Origo.ui.Element({
+        tagName: 'div',
+        cls: 'flex column control box bg-white overflow-hidden o-hidden',
+        style: {
+          left: '4rem',
+          top: '1rem',
+          padding: '0.5rem',
+          width: '25rem',
+          'z-index': '-1'
+        },
+        components: [headerComp, productSelectorTextComp, productSelect, layersSelect, additionalLayersTextComp, layersSelectSelectedOptions, formatSelectorTextComp, fileTypeSelect, coordSysSelect, drawToolSelectorTextComp, drawToolbarComp, exportBtn, authSeparator, userInfoComp, signOutBtn]
+      });
+
+      // Ensure controlContainer is registered as a child component so its
+      // `onRender` handlers are called when this component dispatches 'render'.
+      this.addComponent(controlContainer);
 
       drawHandler = GeouttagDrawHandler({
         stylewindow: null,
@@ -914,170 +1108,6 @@ const Geouttag = function Geouttag(options = {}) {
       }
     },
 
-    onInit() {
-      layersSelectSelectedOptions = Origo.ui.Element({
-        tagName: 'div',
-        cls: 'selected-options'
-      });
-
-      layersSelectInput = Origo.ui.Element({
-        tagName: 'input',
-        attributes: {
-          type: 'text',
-          placeholder: getConfiguredLayersExist() ? 'Välj kartlager..' : 'Inga tillgängliga kartlager',
-          disabled: !(getConfiguredLayersExist())
-        },
-        cls: `select-input custom-select-input text-small ${(getConfiguredLayersExist()) ? '' : 'disabled'}`
-      });
-
-      layersSelectOptionsDropdown = Origo.ui.Element({
-        tagName: 'div',
-        cls: 'options-dropdown',
-        style: 'display:none'
-      });
-
-      layersSelect = Origo.ui.Element({
-        tagName: 'div',
-        cls: 'custom-select',
-        components: [layersSelectOptionsDropdown, layersSelectInput]
-      });
-
-      geouttagButton = Origo.ui.Button({
-        cls: 'padding-small margin-bottom-smaller icon-smaller round light box-shadow tooltip',
-        click() {
-          toggleGeouttag();
-        },
-        icon: '#geouttag_ic_download_24px',
-        tooltipText: 'Geouttag',
-        tooltipPlacement: 'east'// ,
-        // state: 'disabled' - funkar
-      });
-
-      exportBtn = Origo.ui.Element({
-        tagName: 'button',
-        cls: 'export-btn light box-shadow',
-        style: 'margin-top: 1.3rem; width: 30%',
-        attributes: {
-          disabled: true
-        },
-        innerHTML: 'Starta export'
-      });
-
-      productSelect = Origo.ui.Element({
-        tagName: 'select',
-        cls: 'text-small',
-        innerHTML: getSelectOptionsHtml({
-          selectOptions: products,
-          defaultNothing: {
-            title: 'Välj en produkt..',
-            name: 'defaultSelectionValue'
-          }
-        })
-      });
-
-      fileTypeSelect = Origo.ui.Element({
-        tagName: 'select'
-      });
-
-      coordSysSelect = Origo.ui.Element({
-        tagName: 'select',
-        cls: 'text-small',
-        innerHTML: coordSyses.map((epsgCode) => `<option value="${epsgCode}">EPSG:${epsgCode}</option>`).join('')
-      });
-
-      headerComp = Origo.ui.Element({
-        tagName: 'h3',
-        innerHTML: 'GeoUttag',
-        style: 'text-align: center;'
-      });
-
-      productSelectorTextComp = Origo.ui.Element({
-        tagName: 'p',
-        innerHTML: 'Välj en produkt eller ett till flera lager i kartan',
-        cls: 'text-small padding-bottom-small padding-left-small'
-      });
-
-      additionalLayersTextComp = Origo.ui.Element({
-        tagName: 'p',
-        innerHTML: "Syns inte lagret du önskar, saknar du något?<br>Mejla <a href='mailto:gissupport@eskilstuna.se'>gissupport@eskilstuna.se",
-        cls: 'text-smaller padding-bottom-small padding-left-small'
-      });
-
-      formatSelectorTextComp = Origo.ui.Element({
-        tagName: 'p',
-        innerHTML: 'Välj ett exportformat och koordinatsystem',
-        cls: 'text-small padding-top-large padding-bottom-small padding-left-small'
-      });
-
-      drawToolSelectorTextComp = Origo.ui.Element({
-        tagName: 'p',
-        innerHTML: 'Välj ett verktyg för att rita önskat område att exportera',
-        cls: 'text-small padding-left-small',
-        style: 'padding-bottom: 0.4rem;'
-      });
-
-      polygonSelectionButton = Origo.ui.Button({
-        cls: 'light text-smaller padding-left-large',
-        style: 'flex: 1 1 auto;',
-        text: 'polygon',
-        state: 'active'
-      });
-
-      squareSelectionButton = Origo.ui.Button({
-        cls: 'light text-smaller',
-        style: 'flex: 1 1 auto;',
-        text: 'kvadrat',
-        state: 'initial'
-      });
-
-      rectangleSelectionButton = Origo.ui.Button({
-        cls: 'light text-smaller padding-right-large',
-        style: 'flex: 1 1 auto;',
-        text: 'rektangel'
-      });
-
-      drawToolbarComp = Origo.ui.ToggleGroup({
-        cls: 'flex button-group divider-horizontal rounded-large bg-inverted box-shadow',
-        style: { height: 'fit-content', display: 'flex', width: '75%' }, // width: 75%;
-        components: [polygonSelectionButton, squareSelectionButton, rectangleSelectionButton]
-      });
-
-      // ArcGIS OAuth UI components
-      const authSeparator = Origo.ui.Element({
-        tagName: 'hr',
-        cls: 'separator',
-        style: 'margin: 0.8rem 0; border: none; border-top: 1px solid #ccc;'
-      });
-
-      signOutBtn = Origo.ui.Button({
-        cls: 'light text-smaller padding-left-large padding-right-large',
-        style: 'width: 100%; display: none;',
-        text: 'Logga ut från ArcGIS Portal'
-      });
-
-      userInfoComp = Origo.ui.Element({
-        tagName: 'div',
-        cls: 'text-smaller padding-left-small padding-bottom-small',
-        style: 'display: none; font-style: italic;'
-      });
-
-      controlContainer = Origo.ui.Element({
-        tagName: 'div',
-        cls: 'flex column control box bg-white overflow-hidden o-hidden',
-        style: {
-          left: '4rem',
-          top: '1rem',
-          padding: '0.5rem',
-          width: '25rem',
-          'z-index': '-1'
-        },
-        components: [headerComp, productSelectorTextComp, productSelect, layersSelect, additionalLayersTextComp, layersSelectSelectedOptions, formatSelectorTextComp, fileTypeSelect, coordSysSelect, drawToolSelectorTextComp, drawToolbarComp, exportBtn, authSeparator, userInfoComp, signOutBtn]
-      });
-
-      // Ensure controlContainer is registered as a child component so its
-      // `onRender` handlers are called when this component dispatches 'render'.
-      this.addComponent(controlContainer);
-    },
     render() {
       document.getElementById(viewer.getMain().getMapTools().getId()).append(Origo.ui.dom.html(geouttagButton.render())); // den enda komponenten som ska synas från start
       document.getElementById(viewer.getMain().getId()).append(Origo.ui.dom.html(controlContainer.render()));

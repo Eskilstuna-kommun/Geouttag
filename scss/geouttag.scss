@@ -12,6 +12,11 @@
     border-radius: 16px;
 }
 
+.export-btn:not(:disabled) {
+    color: hsl(205, 100%, 48%);
+    font-weight: bold;
+}
+
 .export-btn:disabled{
     margin-top: 1.3rem;
     background: #7b7979;

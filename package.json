@@ -4,8 +4,9 @@
   "description": "",
   "main": "geouttag.js",
   "scripts": {
-    "start": "npm-run-all --parallel watch-js watch-sass",
+    "start": "npm-run-all --parallel watch-js watch-sass proxy-server",
     "watch-js": "vite build --watch --mode development ",
+    "proxy-server": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "prewatch-sass": "copyfiles -u 2 resources/svg/material-icons.svg ../origo/plugins/geouttag",
     "watch-sass": "sass -w scss/geouttag.scss ../origo/plugins/geouttag/geouttag.css",
     "build": "vite build --mode production && npm run build-sass && copyfiles -u 2 resources/svg/material-icons.svg build",

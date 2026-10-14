@@ -26,9 +26,14 @@ const Geouttag = function Geouttag(options = {}) {
     coordSyses = [],
     drawlayerTitle = '',
     arcgisClientId = import.meta.env.VITE_ARC_GIS_CLIENT_ID || '',
-    arcgisTokenEndpoint = import.meta.env.VITE_ARC_GIS_TOKEN_ENDPOINT || ''
+    arcgisTokenEndpoint: configuredArcgisTokenEndpoint = import.meta.env.VITE_ARC_GIS_TOKEN_ENDPOINT || ''
 
   } = options;
+  // The map itself is served by Origo's dev server on :9966. Route token
+  // exchanges through this plugin's Vite proxy on :5173 during development.
+  const arcgisTokenEndpoint = import.meta.env.DEV
+    ? 'http://127.0.0.1:5173/portal/sharing/rest/oauth2/token'
+    : configuredArcgisTokenEndpoint;
 
   let viewer;
   let map;
@@ -119,9 +124,11 @@ const Geouttag = function Geouttag(options = {}) {
 
   function createImageServer() {
     return ImageServer({
+      predefinedExports: products,
       products,
       productSelect,
       fileTypeSelect,
+      filetypesById,
       arcgisSession,
       arcgisClientId,
       arcgisTokenEndpoint,

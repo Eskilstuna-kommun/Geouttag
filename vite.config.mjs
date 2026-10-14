@@ -5,6 +5,22 @@ export default defineConfig(({ mode }) => {
   const isProduction = mode === 'production';
 
   return {
+    // Resolve .env files relative to this plugin, not the shell's working directory.
+    envDir: import.meta.dirname,
+    server: {
+      host: '127.0.0.1',
+      port: 5173,
+      strictPort: true,
+      cors: {
+        origin: 'http://localhost:9966'
+      },
+      proxy: {
+        '/portal/sharing/rest/oauth2/token': {
+          target: 'https://geo.eskilstuna.se',
+          changeOrigin: true
+        }
+      }
+    },
     build: {
       outDir: isProduction ? 'build' : '../origo/plugins/geouttag',
       emptyOutDir: isProduction,

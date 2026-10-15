@@ -152,9 +152,9 @@ const ImageServer = function ImageServer(options = {}) {
     // The select's value is a filetype id; resolve it to the actual output
     // format via the same filetypesById lookup sendData uses for FME exports.
     const fileTypeSelectElement = document.getElementById(fileTypeSelect.getId());
-    const selectedFormat = fileTypeSelectElement.value;
     const filetypeObj = filetypesById[fileTypeSelectElement.value];
     const selectedFormat = filetypeObj && filetypeObj.outputFormat;
+    console.log('selectedFormat', selectedFormat)
 
     if (!selectedFormat) {
       console.error('No format selected for ArcGIS imageServer download');
@@ -191,7 +191,7 @@ const ImageServer = function ImageServer(options = {}) {
     let sessionExpired = false;
 
     // Build the base ImageServer download URL (use f=json to get individual file URLs)
-    const jsonUrl = `https://geo.eskilstuna.se/imageserver/rest/services/${selectedProduct.name}/ImageServer/download?rasterIds=1&geometry=${encodeURIComponent(geometry)}&geometryType=${geometryType}&format=${filetype.outputFormat}&f=json&token=${token}`;
+    const jsonUrl = `https://geo.eskilstuna.se/imageserver/rest/services/${selectedProduct.name}/ImageServer/download?rasterIds=1&geometry=${encodeURIComponent(geometry)}&geometryType=${geometryType}&format=${selectedFormat}&f=json&token=${token}`;
 
     fetch(jsonUrl)
       .then((response) => {

@@ -882,25 +882,6 @@ const Geouttag = function Geouttag(options = {}) {
         components: [polygonSelectionButton, squareSelectionButton, rectangleSelectionButton]
       });
 
-      // ArcGIS OAuth UI components
-      const authSeparator = Origo.ui.Element({
-        tagName: 'hr',
-        cls: 'separator',
-        style: 'margin: 0.8rem 0; border: none; border-top: 1px solid #ccc;'
-      });
-
-      signOutBtn = Origo.ui.Button({
-        cls: 'light text-smaller padding-left-large padding-right-large',
-        style: 'width: 100%; display: none;',
-        text: getString('signOutText')
-      });
-
-      userInfoComp = Origo.ui.Element({
-        tagName: 'div',
-        cls: 'text-smaller padding-left-small padding-bottom-small',
-        style: 'display: none; font-style: italic;'
-      });
-
       controlContainer = Origo.ui.Element({
         tagName: 'div',
         cls: 'flex column control box bg-white overflow-hidden o-hidden',
@@ -911,7 +892,7 @@ const Geouttag = function Geouttag(options = {}) {
           width: '25rem',
           'z-index': '-1'
         },
-        components: [headerComp, productSelectorTextComp, productSelect, layersSelect, additionalLayersTextComp, layersSelectSelectedOptions, formatSelectorTextComp, fileTypeSelect, coordSysSelect, drawToolSelectorTextComp, drawToolbarComp, exportBtn, authSeparator, userInfoComp, signOutBtn]
+        components: [headerComp, productSelectorTextComp, productSelect, layersSelect, additionalLayersTextComp, layersSelectSelectedOptions, formatSelectorTextComp, fileTypeSelect, coordSysSelect, drawToolSelectorTextComp, drawToolbarComp, exportBtn]
       });
 
       // Ensure controlContainer is registered as a child component so its

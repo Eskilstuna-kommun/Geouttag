@@ -369,33 +369,38 @@ const Geouttag = function Geouttag(options = {}) {
     // A whole-exportable selection may be exported without a geometry; in
     // that case no geom parameter is sent and the whole dataset is exported.
 
-    const requestUrl = new URL(`${fmeFlowDataDownloadUrl}/${filetype.FMEWorkspace}`);
+    const requestUrl = new URL(`${fmeFlowDataDownloadUrl}`);
+    console.log(requestUrl, requestUrl);
     const coordSysSelectElement = document.getElementById(coordSysSelect.getId());
     const crs = coordSysSelectElement && coordSysSelectElement.value
       ? `EPSG:${coordSysSelectElement.value}`
       : '';
-    const urlEncodedData = new URLSearchParams({
+
+    const exportData = {
+      workspace: filetype.FMEWorkspace,
       outputFormat: filetype.outputFormat,
-      token: import.meta.env.VITE_FME_FLOW_TOKEN
-    });
-    if (coordinatesString) urlEncodedData.append('geom', `POLYGON ${coordinatesString}`);
-    if (crs) urlEncodedData.append('crs', crs);
-    exportNames.forEach((name) => urlEncodedData.append('exportName', name));
+      exportNames
+    };
 
-    const inputsString = Array.from(urlEncodedData.entries())
-      .map(([name, value]) => `<input type="hidden" name="${name}" value="${value}">`);
+    if (coordinatesString) {
+      exportData.geom = `POLYGON ${coordinatesString}`;
+    }
 
-    // Open a new window with spinner, then load the export
+    if (crs) {
+      exportData.crs = crs;
+    }
+
+    // Öppna exportfönstret direkt vid användarens klick
     const exportWindow = window.open('', '_blank');
 
     if (!exportWindow) {
-      console.error('Popup blocked! Please allow popups for this site.');
+      console.error('Popup blocked!');
       alert(getString('popupBlockedExportAlertText'));
       return;
     }
 
     // Create HTML content with spinner and form for POST request
-    const htmlContent = `
+    exportWindow.document.write(`
       <!DOCTYPE html>
       <html lang="sv">
         <head>
@@ -403,12 +408,6 @@ const Geouttag = function Geouttag(options = {}) {
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>${getString('exportWindowTitle')}</title>
           <style>
-            * {
-              margin: 0;
-              padding: 0;
-              box-sizing: border-box;
-            }
-
             body {
               width: 100vw;
               height: 100vh;
@@ -416,7 +415,6 @@ const Geouttag = function Geouttag(options = {}) {
               flex-direction: column;
               justify-content: center;
               align-items: center;
-              background-color: rgba(255, 255, 255, 0.95);
               font-family: Arial, sans-serif;
               overflow: hidden;
             }
@@ -442,79 +440,70 @@ const Geouttag = function Geouttag(options = {}) {
               text-align: center;
               padding: 0 20px;
             }
-
-            .iframe-container {
-              position: fixed;
-              top: 0;
-              left: 0;
-              width: 100%;
-              height: 100%;
-              display: none;
-            }
-
-            .iframe-container iframe {
-              width: 100%;
-              height: 100%;
-              border: none;
-            }
-
-            form {
-              display: none;
-            }
           </style>
         </head>
         <body>
           <div class="spinner"></div>
-          <p class="message">${getString('waitingForExportText').replace('{0}', displayNames)}</p>
-
-          <div class="iframe-container" id="iframe-container">
-            <iframe id="export-iframe" title="Export"></iframe>
-          </div>
-
-          <form id="export-form" action="${requestUrl}" method="POST">
-          ${inputsString.join('')}
-          </form>
-
-          <script>
-            // Submit the form to trigger the POST request
-            const form = document.getElementById('export-form');
-            form.submit();
-
-            // Handle the response
-            const iframe = document.getElementById('export-iframe');
-            const container = document.getElementById('iframe-container');
-            const spinner = document.querySelector('.spinner');
-            const message = document.querySelector('.message');
-
-            // Listen for messages from the iframe
-            window.addEventListener('message', function(event) {
-              if (event.origin !== window.location.origin) return;
-
-              if (event.data === 'export-complete') {
-                spinner.style.display = 'none';
-                message.style.display = 'none';
-                container.style.display = 'block';
-              } else if (event.data === 'export-error') {
-                message.innerHTML = '${getString('exportErrorText')}';
-                message.style.color = 'red';
-              }
-            });
-
-            // Fallback: if no response within 30 seconds, show error
-            setTimeout(function() {
-              if (container.style.display !== 'block') {
-                message.innerHTML = '${getString('exportStillRunningText').replace('{0}', displayNames)}';
-                message.style.color = 'none';
-              }
-            }, 30000);
-          </script>
+          <p class="message">
+            ${getString('waitingForExportText').replace('{0}', displayNames)}
+          </p>
         </body>
       </html>
-    `;
-    // Write HTML to the new window using modern approach with Blob
-    const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
-    const blobUrl = URL.createObjectURL(blob);
-    exportWindow.location.href = blobUrl;
+    `);
+    // Skicka exportbegäran till Geouttag API
+    fetch(requestUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(exportData)
+    })
+      .then(async response => {
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+
+        const blob = await response.blob();
+
+        if (!blob.size) {
+          throw new Error('Exporten returnerade en tom fil');
+        }
+
+        const downloadUrl = URL.createObjectURL(blob);
+
+        const link = document.createElement('a');
+
+        link.href = downloadUrl;
+        link.download = 'geouttag.zip';
+
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+
+        if (!exportWindow.closed) {
+          exportWindow.close();
+        }
+
+        setTimeout(() => {
+          URL.revokeObjectURL(downloadUrl);
+        }, 60000);
+      })
+      .catch(error => {
+        console.error('Geouttag export failed:', error);
+
+        if (!exportWindow.closed) {
+          const message = exportWindow.document.querySelector('.message');
+          const spinner = exportWindow.document.querySelector('.spinner');
+
+          if (spinner) spinner.style.display = 'none';
+
+          if (message) {
+            message.textContent = getString('exportErrorText');
+            message.style.color = 'red';
+          }
+        }
+      });
   }
 
   /* Updates extent coordinates of rectangle */

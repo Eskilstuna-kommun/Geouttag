@@ -353,8 +353,7 @@ const Geouttag = function Geouttag(options = {}) {
 
     let coordinatesString = '';
     // Check if polygon coordinates
-    if (coords && currentDrawType === 'Polygon') {
-      // Use actual polygon coordinates
+    if (coords) {
       const coordinateString = coords
         .map(coord => `${coord[0]} ${coord[1]}`)
         .join(',');

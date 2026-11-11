@@ -512,7 +512,7 @@ const Geouttag = function Geouttag(options = {}) {
     const geometry = feature.getGeometry();
     const geometryType = geometry.getType();
 
-    if (geometryType === 'Polygon' && (currentDrawType === 'Polygon')) {
+    if (geometryType === 'Polygon') {
       coords = geometry.getCoordinates()[0]; // any shape
     } else { // rectangle shape assumed
       const extent = geometry.getExtent();

@@ -24,7 +24,8 @@ The plugin can be loaded like this in an html-file:
       origo.on('load', function(viewer) {
 
       const geouttag = Geouttag({
-        fmeFlowDataDownloadUrl: "URL to the FME Flow data download service",
+        fmeFlowDataDownloadUrl: "URL to geouttag_fme_api", // ("https://ikarta.eskilstuna.se/api/geouttag/export")
+        arcgisTokenEndpoint: "URL to arcgisTokenEndPoint", // (http://127.0.0.1:5173/portal/sharing/rest/oauth2/token)
         // Coordinate systems offered in the export UI, as EPSG codes
         coordSyses: [
           {ref: "3010", title: "SWEREF99 16 30"},
@@ -33,11 +34,11 @@ The plugin can be loaded like this in an html-file:
         ],
         products: [ // "products" are sometimes a combination of spatial tables and related data, and can have their own output file formats and FME workspaces
           {
-            name: "base",
-            title: "Base map",
+            name: "bakgrundskarta_enkel",
+            title: "Bakgrundskarta enkel",
             // Optional max exportable area in km2; the sketch is warning-styled when exceeded
             maxArea: 100,
-            FMEWorkspace: "basemap.fmw",
+            FMEWorkspace: "Geouttag_bgkarta_enkel.fmw",
             filetypes: [
               {
                 title: "DWG",
@@ -50,17 +51,17 @@ The plugin can be loaded like this in an html-file:
             ]
           },
           {
-            name: "cyclingmap",
-            title: "Cycling map",
-            FMEWorkspace: "cycling_cad.fmw",
+            name: "TEST/ortofoto_2025_cog_lerc0",
+            title: "Ortofoto 2025 cog lerc0",
+            imageServer: true,
             filetypes: [
               {
-                title: "DWG",
-                outputFormat: "DWG"
+                title: "JPG",
+                outputFormat: "JPG"
               },
               {
-                title: "Shape",
-                outputFormat: "SHP"
+                title: "PNG",
+                outputFormat: "PNG"
               }
             ]
           },
@@ -80,23 +81,35 @@ The plugin can be loaded like this in an html-file:
         layersConf: { // "layers" have common properties - one shared FME workspace and output file formats
           filetypes: [
             {
-              title: "GML3",
-              outputFormat: "GML3"
-            },
-            {
               title: "GeoJSON",
-              outputFormat: "application/json"
+              outputFormat: "GeoJSON"
             },
             {
-              title: "dxf",
-              outputFormat: "dxf"
+              title: "DWG",
+              outputFormat: "DWG"
+            },
+            {
+              title: "DXF",
+              outputFormat: "DXF"
+            },
+            {
+              title: "XLS",
+              outputFormat: "XLS"
+            },
+            {
+              title: "SHP",
+              outputFormat: "SHP"
             },
             {
               title: "GeoPackage",
-              outputFormat: "geopkg"
-            }
+              outputFormat: "GeoPackage"
+            },
+            {
+              title: "GML3",
+              outputFormat: "GML3"
+            },
           ],
-          FMEWorkspace: "maplayers_wfs.fmw",
+          FMEWorkspace: "Geouttag_maplayers.fmw",
           layers: [
             {
               name: "sokvyx_intressepunkter_kff_ok_bibliotek",
@@ -130,4 +143,4 @@ The plugin can be loaded like this in an html-file:
 - `maxArea` (optional, km²) may be declared per product and per layer to cap the exportable area. When several layers are selected, the smallest `maxArea` among them applies. While no product or layer is selected, no area limit is applied. An area exceeding the limit is warning-styled while sketching and stays warning-styled once the sketch is finished, and the export button stays disabled.
 - `wholeExportable` (optional, boolean) may be declared per product (not for `imageServer` products, for which it is disregarded) and per layer to mark an export that can be delivered in its entirety, without a drawn geometry defining an export area. When every selected item is `wholeExportable`, the export button can be enabled without a sketch, and the export is posted without a `geom` parameter. A `wholeExportable` layer that is exported together with layers that need a geometry is cut by the drawn geometry just like everything else.
 - The FME Flow token is read from the `VITE_FME_FLOW_TOKEN` environment variable at build time (see `.env.example`).
-- ArcGIS OAuth settings (`VITE_ARC_GIS_CLIENT_ID` and `VITE_ARC_GIS_TOKEN_ENDPOINT`) are also read from the plugin's `.env` file at build time. Copy `.env.example` to `.env`, set the values, then run `npm start` from this `Geouttag` directory. Restart `npm start` after changing `.env`; the running Origo app only sees the values embedded in the newly built plugin bundle.
+- ArcGIS OAuth settings (`VITE_ARC_GIS_CLIENT_ID`) are also read from the plugin's `.env` file at build time. Copy `.env.example` to `.env`, set the values, then run `npm start` from this `Geouttag` directory. Restart `npm start` after changing `.env`; the running Origo app only sees the values embedded in the newly built plugin bundle.

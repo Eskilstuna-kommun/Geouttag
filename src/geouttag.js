@@ -26,14 +26,9 @@ const Geouttag = function Geouttag(options = {}) {
     coordSyses = [],
     drawlayerTitle = '',
     arcgisClientId = import.meta.env.VITE_ARC_GIS_CLIENT_ID || '',
-    arcgisTokenEndpoint: configuredArcgisTokenEndpoint = import.meta.env.VITE_ARC_GIS_TOKEN_ENDPOINT || ''
+    arcgisTokenEndpoint = ''
 
   } = options;
-  // The map itself is served by Origo's dev server on :9966. Route token
-  // exchanges through this plugin's Vite proxy on :5173 during development.
-  const arcgisTokenEndpoint = import.meta.env.DEV
-    ? 'http://127.0.0.1:5173/portal/sharing/rest/oauth2/token'
-    : configuredArcgisTokenEndpoint;
 
   let viewer;
   let map;
@@ -66,7 +61,6 @@ const Geouttag = function Geouttag(options = {}) {
   let mapLayerOptionElements = [];
   let selectedLayers = [];
   let geouttagLayer;
-  let currentDrawType = 'Polygon';
   let coords;
   let drawHandler;
   let signOutBtn;
@@ -639,8 +633,6 @@ const Geouttag = function Geouttag(options = {}) {
 
   // Function to change draw tool
   function changeDrawTool(toolType) {
-    currentDrawType = toolType;
-
     // Only change the interaction if geouttag is currently active
     if (isActive) {
       // Remove current interaction, if one has been created

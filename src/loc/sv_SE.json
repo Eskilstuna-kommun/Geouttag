@@ -22,6 +22,7 @@
         "exportErrorText": "Ett fel uppstod vid exporten. Vänligen försök igen.",
         "popupBlockedDownloadAlertText": "Kunde inte öppna nedladdningsfönstret. Kontrollera att popup-blockerare är avstängd för denna sida.",
         "downloadingRasterTitle": "Laddar ner raster...",
+        "waitingForArcgisAuthText": "Väntar på att du ska autentisera i ArcGIS-fönstret...",
         "downloadingRasterText": "Laddar ner raster från imageserver...",
         "creatingZipText": "Skapar ZIP-fil när nedladdningen är klar",
         "rasterDownloadTitle": "Raster nedladdning",

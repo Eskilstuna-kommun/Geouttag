@@ -1,34 +1,26 @@
 import 'Origo';
+import downloadBlob from './download';
 /* global JSZip */
 
-// Module-scope so the PKCE code verifier survives between the openArcGISAuth() call
-// (which opens the popup) and the later oauthCallback token exchange, even though a
-// fresh ImageServer() instance is created for each of those calls.
+// Module-scope so the PKCE verifier survives the Portal redirect and token exchange.
 let storedCodeVerifier = null;
 
-/* Self-callback detection: when the ArcGIS OAuth popup redirects back to this same page
-   with ?code=... (or an error), this closes the popup and hands the code back to the
-   opener window via window.opener.oauthCallback(). Must be called once, at module load
-   time in geouttag.js, before the rest of the app initializes. */
-export function handleOAuthCallback() {
-  // If user cancelled (error in query string), just close the popup silently
-  if (window.location.search && window.location.search.match(/[?&]error=/)) {
-    if (window.opener) {
-      window.stop();
-      window.close();
-    }
+/* The OAuth callback can reuse the popup as the raster export progress window. */
+export async function handleOAuthCallback() {
+  const params = new URLSearchParams(window.location.search);
+  const authError = params.get('error');
+  if (authError && window.opener && typeof window.opener.oauthCallback === 'function') {
+    window.stop();
+    const keepWindowOpen = await window.opener.oauthCallback(null, window, authError);
+    if (!keepWindowOpen) window.close();
     return;
   }
 
-  // PKCE flow: authorization code in query string (?code=...). Other query
-  // params may be present (e.g. ?loc=sv-SE set by the localization control),
-  // so the code matcher must run on its own and never assume a match.
-  if (window.location.search) {
-    const match = window.location.search.match(/[?&]code=([^&]+)/);
-    if (match && match[1]) {
-      window.opener.oauthCallback(match[1]);
-      window.close();
-    }
+  const code = params.get('code');
+  if (code && window.opener && typeof window.opener.oauthCallback === 'function') {
+    window.stop();
+    const keepWindowOpen = await window.opener.oauthCallback(code, window);
+    if (!keepWindowOpen) window.close();
   }
 }
 
@@ -71,44 +63,38 @@ export function isArcGISSessionValid(session) {
 const ImageServer = function ImageServer(options = {}) {
   const {
     predefinedExports = [],
-    productSelect,
-    fileTypeSelect,
-    filetypesById = {},
     arcgisSession = null,
     arcgisClientId,
     arcgisTokenEndpoint,
+    arcgisAuthorizationEndpoint,
     userInfoComp,
-    coords,
-    x1,
-    y1,
-    x2,
-    y2,
-    onInvalidSession,
     getString
   } = options;
+  let currentSession = arcgisSession;
+  let onAuthChangeCallback;
+  let onAuthFailureCallback;
+  const pendingRasterExports = new Set();
+  let rasterAuthInProgress = false;
+  let rasterAuthWindow = null;
+  let rasterAuthWindowMonitor = null;
 
   // Helper to open ArcGIS OAuth popup (Authorization Code with PKCE)
-  async function openArcGISAuth() {
+  async function openArcGISAuth(existingWindow) {
     const popupWidth = 600;
     const popupHeight = 400;
     const left = Math.max(0, Math.round((window.screen.availWidth - popupWidth) / 2));
     const top = Math.max(0, Math.round((window.screen.availHeight - popupHeight) / 2));
 
-    const authWindow = window.open('about:blank', 'oauth-window', `height=${popupHeight},width=${popupWidth},left=${left},top=${top},menubar=no,location=yes,resizable=yes,scrollbars=yes,status=yes`);
+    const authWindow = existingWindow || window.open('about:blank', 'oauth-window', `height=${popupHeight},width=${popupWidth},left=${left},top=${top},menubar=no,location=yes,resizable=yes,scrollbars=yes,status=yes`);
 
     const codeVerifier = generateRandomString();
     const codeChallenge = await challengeFromVerifier(codeVerifier);
     storedCodeVerifier = codeVerifier;
     const redirectUri = window.location.href;
-    const authorizationEndpoint = `https://geo.eskilstuna.se/portal/sharing/rest/oauth2/authorize?client_id=${arcgisClientId}&code_challenge=${codeChallenge}&code_challenge_method=S256&redirect_uri=${window.encodeURIComponent(redirectUri)}&response_type=code&expiration=20160`;
+    const authorizationEndpoint = `${arcgisAuthorizationEndpoint}?client_id=${arcgisClientId}&code_challenge=${codeChallenge}&code_challenge_method=S256&redirect_uri=${window.encodeURIComponent(redirectUri)}&response_type=code&expiration=20160`;
 
-    if (authWindow) {
-      authWindow.location.href = authorizationEndpoint;
-    } else {
-      // Popup was blocked outright — fall back to a normal navigation (still same-tab-name so a
-      // second attempt reuses/replaces it rather than piling up tabs).
-      window.open(authorizationEndpoint, 'oauth-window');
-    }
+    if (authWindow) authWindow.location.href = authorizationEndpoint;
+    return authWindow;
   }
 
   function getCodeVerifier() {
@@ -140,38 +126,206 @@ const ImageServer = function ImageServer(options = {}) {
     });
   }
 
+  function writeExportProgressWindow(exportWindow, title, message, showSpinner = true) {
+    exportWindow.document.open();
+    exportWindow.document.write(`
+      <!DOCTYPE html>
+      <html lang="sv">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>${title}</title>
+          <style>
+            body {
+              width: 100vw;
+              height: 100vh;
+              display: flex;
+              flex-direction: column;
+              justify-content: center;
+              align-items: center;
+              font-family: Arial, sans-serif;
+              overflow: hidden;
+            }
+            .spinner {
+              border: 4px solid #f3f3f3;
+              border-top: 4px solid #3498db;
+              border-radius: 50%;
+              width: 60px;
+              height: 60px;
+              animation: spin 1s linear infinite;
+              margin-bottom: 20px;
+            }
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+            .message {
+              font-size: 18px;
+              color: #333;
+              text-align: center;
+              padding: 0 20px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="spinner"${showSpinner ? '' : ' style="display:none;"'}></div>
+          <p class="message">${message}</p>
+        </body>
+      </html>
+    `);
+    exportWindow.document.close();
+  }
+
+  function openExportProgressWindow(title, message, showSpinner) {
+    const exportWindow = window.open('', '_blank');
+    if (exportWindow) writeExportProgressWindow(exportWindow, title, message, showSpinner);
+    return exportWindow;
+  }
+
+  function updateExportProgressWindow(exportWindow, message, isError = false, showSpinner = true) {
+    if (!exportWindow || exportWindow.closed) return;
+    const messageElement = exportWindow.document.querySelector('.message');
+    const spinner = exportWindow.document.querySelector('.spinner');
+    if (messageElement) {
+      messageElement.textContent = message;
+      if (isError) messageElement.style.color = 'red';
+    }
+    if (spinner) spinner.style.display = isError || !showSpinner ? 'none' : '';
+  }
+
+  function finishRasterExport(exportJob, { blob, fileName, error } = {}) {
+    pendingRasterExports.delete(exportJob);
+    const { progressWindow } = exportJob;
+    if (error) {
+      console.error('Raster export failed:', error);
+      if (progressWindow && !progressWindow.closed) {
+        if (progressWindow === rasterAuthWindow) {
+          writeExportProgressWindow(
+            progressWindow,
+            getString('downloadingRasterTitle'),
+            getString('exportErrorText'),
+            false
+          );
+          updateExportProgressWindow(progressWindow, getString('exportErrorText'), true);
+        } else {
+          updateExportProgressWindow(progressWindow, getString('exportErrorText'), true);
+        }
+      } else {
+        alert(getString('exportErrorText'));
+      }
+    } else {
+      downloadBlob(blob, fileName);
+      if (progressWindow && !progressWindow.closed) progressWindow.close();
+    }
+  }
+
+  function clearRasterAuthMonitor() {
+    if (rasterAuthWindowMonitor) {
+      window.clearInterval(rasterAuthWindowMonitor);
+      rasterAuthWindowMonitor = null;
+    }
+  }
+
+  function failPendingRasterAuth(error) {
+    const pendingJobs = Array.from(pendingRasterExports);
+    const keepAuthWindow = pendingJobs.some((job) => job.progressWindow === rasterAuthWindow);
+    pendingJobs.forEach((job) => finishRasterExport(job, { error }));
+    rasterAuthInProgress = false;
+    clearRasterAuthMonitor();
+    if (!keepAuthWindow && rasterAuthWindow && !rasterAuthWindow.closed) {
+      rasterAuthWindow.close();
+    }
+    rasterAuthWindow = null;
+  }
+
+  function monitorPendingRasterAuth() {
+    clearRasterAuthMonitor();
+    rasterAuthWindowMonitor = window.setInterval(() => {
+      if (!rasterAuthInProgress || pendingRasterExports.size === 0) {
+        clearRasterAuthMonitor();
+      } else if (!rasterAuthWindow || rasterAuthWindow.closed) {
+        failPendingRasterAuth(new Error('ArcGIS sign-in window was closed.'));
+      }
+    }, 500);
+  }
+
+  function queueRasterExportForAuth(exportJob) {
+    pendingRasterExports.add(exportJob);
+    if (rasterAuthInProgress) return;
+
+    rasterAuthInProgress = true;
+    openArcGISAuth()
+      .then((authWindow) => {
+        if (!rasterAuthInProgress) return;
+        if (authWindow) {
+          rasterAuthWindow = authWindow;
+        } else {
+          const fallbackJob = Array.from(pendingRasterExports)
+            .find((job) => job.progressWindow && !job.progressWindow.closed);
+          if (!fallbackJob) {
+            failPendingRasterAuth(new Error('Could not open the ArcGIS sign-in window.'));
+            return;
+          }
+          rasterAuthWindow = fallbackJob.progressWindow;
+          openArcGISAuth(rasterAuthWindow)
+            .then(monitorPendingRasterAuth)
+            .catch((error) => failPendingRasterAuth(error));
+          return;
+        }
+        monitorPendingRasterAuth();
+      })
+      .catch((error) => failPendingRasterAuth(error));
+  }
+
+  function handleInvalidArcgisSession(exportJob) {
+    currentSession = null;
+    localStorage.removeItem('__ARCGIS_USER_SESSION__');
+    const userInfoEl = userInfoComp && document.getElementById(userInfoComp.getId());
+    if (userInfoEl) {
+      userInfoEl.style.display = 'none';
+      userInfoEl.innerHTML = '';
+    }
+    if (onAuthChangeCallback) onAuthChangeCallback(null);
+    updateExportProgressWindow(
+      exportJob.progressWindow,
+      getString('waitingForArcgisAuthText'),
+      false,
+      false
+    );
+    queueRasterExportForAuth(exportJob);
+  }
+
   /* Construct and open ArcGIS ImageServer download URL for imageServer export */
-  function sendArcGISRequest(sessionOverride) {
-    // Only proceed if the selected product has imageServer: true
-    const productSelectElement = document.getElementById(productSelect.getId());
-    const selectedProduct = predefinedExports.find((p) => p.name === productSelectElement?.value);
+  function sendArcGISRequest(sessionOverride, exportJob) {
+    const { progressWindow, selection, geometry: exportGeometry } = exportJob;
+    const reportError = (error) => {
+      console.error('ArcGIS download failed:', error);
+      finishRasterExport(exportJob, { error });
+    };
+
+    const selectedProduct = predefinedExports.find((p) => p.name === selection.productName);
     if (!selectedProduct || !selectedProduct.imageServer) {
+      reportError(new Error('No raster product selected'));
       return;
     }
 
-    // The select's value is a filetype id; resolve it to the actual output
-    // format via the same filetypesById lookup sendData uses for FME exports.
-    const fileTypeSelectElement = document.getElementById(fileTypeSelect.getId());
-    const filetypeObj = filetypesById[fileTypeSelectElement.value];
-    const selectedFormat = filetypeObj && filetypeObj.outputFormat;
-    console.log('selectedFormat', selectedFormat)
-
+    const selectedFormat = selection.outputFormat;
     if (!selectedFormat) {
-      console.error('No format selected for ArcGIS imageServer download');
+      reportError(new Error('No format selected for ArcGIS imageServer download'));
       return;
     }
 
-    const session = sessionOverride || arcgisSession;
+    const session = sessionOverride || currentSession;
     if (!session || !session.access_token) {
-      console.error('No ArcGIS session available. Please sign in first.');
+      reportError(new Error('No ArcGIS session available. Please sign in first.'));
       return;
     }
 
     // Prefer the drawn polygon (freehand tool) if available, otherwise fall back to the bounding box
     let geometry;
     let geometryType;
-    if (coords && coords.length > 0) {
-      const ring = coords.map((coord) => [coord[0], coord[1]]);
+    if (exportGeometry.coords && exportGeometry.coords.length > 0) {
+      const ring = exportGeometry.coords.map((coord) => [coord[0], coord[1]]);
       const first = ring[0];
       const last = ring[ring.length - 1];
       if (first[0] !== last[0] || first[1] !== last[1]) {
@@ -179,11 +333,12 @@ const ImageServer = function ImageServer(options = {}) {
       }
       geometry = JSON.stringify({ rings: [ring] });
       geometryType = 'esriGeometryPolygon';
-    } else if (x1 !== undefined && y1 !== undefined && x2 !== undefined && y2 !== undefined) {
-      geometry = `${x1},${y1},${x2},${y2}`;
+    } else if (exportGeometry.x1 !== undefined && exportGeometry.y1 !== undefined
+      && exportGeometry.x2 !== undefined && exportGeometry.y2 !== undefined) {
+      geometry = `${exportGeometry.x1},${exportGeometry.y1},${exportGeometry.x2},${exportGeometry.y2}`;
       geometryType = 'esriGeometryEnvelope';
     } else {
-      console.error('No extent available. Please draw an area first.');
+      reportError(new Error('No extent available. Please draw an area first.'));
       return;
     }
 
@@ -205,9 +360,8 @@ const ImageServer = function ImageServer(options = {}) {
           const errorCode = data.error.code;
           const errorMessage = data.error.message || 'ArcGIS returned an error';
           if (errorCode === 498 || errorCode === 499 || /invalid token|token required/i.test(errorMessage)) {
-            localStorage.removeItem('__ARCGIS_USER_SESSION__');
             sessionExpired = true;
-            if (onInvalidSession) onInvalidSession();
+            handleInvalidArcgisSession(exportJob);
             throw new Error(getString('arcgisSessionExpiredText').replace('{0}', errorMessage));
           }
           throw new Error(errorMessage);
@@ -236,53 +390,12 @@ const ImageServer = function ImageServer(options = {}) {
           throw new Error('No download URLs found in the response');
         }
 
-        // Open a progress window
-        const downloadWindow = window.open('', '_blank');
-        if (!downloadWindow) {
-          alert(getString('popupBlockedDownloadAlertText'));
-          return;
-        }
-
-        // Show a spinner page while we work
-        downloadWindow.document.write(`
-          <!DOCTYPE html>
-          <html lang="sv">
-            <head>
-              <meta charset="UTF-8">
-              <title>${getString('downloadingRasterTitle')}</title>
-              <style>
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                body {
-                  width: 100vw; height: 100vh;
-                  display: flex; flex-direction: column;
-                  justify-content: center; align-items: center;
-                  background: #f0f4f8;
-                  font-family: 'Segoe UI', Arial, sans-serif;
-                }
-                .spinner {
-                  border: 4px solid #e0e0e0;
-                  border-top: 4px solid #3498db;
-                  border-radius: 50%;
-                  width: 50px; height: 50px;
-                  animation: spin 1s linear infinite;
-                  margin-bottom: 1.5rem;
-                }
-                @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-                p { color: #555; font-size: 1.1rem; text-align: center; padding: 0 2rem; }
-                .progress-text { color: #888; font-size: 0.9rem; margin-top: 0.5rem; }
-              </style>
-            </head>
-            <body>
-              <div class="spinner"></div>
-              <p>${getString('downloadingRasterText')}</p>
-              <p class="progress-text">${getString('creatingZipText')}</p>
-            </body>
-          </html>
-        `);
-        downloadWindow.document.close();
+        updateExportProgressWindow(progressWindow, getString('downloadingRasterText'));
 
         // Load JSZip from CDN
         await loadJSZip();
+
+        updateExportProgressWindow(progressWindow, getString('creatingZipText'));
 
         // Download each file and add to ZIP
         const zip = new JSZip();
@@ -311,138 +424,122 @@ const ImageServer = function ImageServer(options = {}) {
           throw new Error('Could not download any files');
         }
 
-        // Generate the ZIP blob
         const zipBlob = await zip.generateAsync({ type: 'blob' });
-        const zipBlobUrl = URL.createObjectURL(zipBlob);
-        const zipFileName = `${selectedProduct.name}_${new Date().getTime()}.zip`;
-
-        // Build file list HTML for the success page
-        const fileListHtml = files
-          .map(
-            (f) => `<li>${f.name} ${f.size ? `(${(f.size / 1024).toFixed(0)} KB)` : ''}</li>`
-          )
-          .join('');
-
-        // Show success page with download button in the new window
-        downloadWindow.location.href = URL.createObjectURL(
-          new Blob(
-            [
-              `
-          <!DOCTYPE html>
-          <html lang="sv">
-            <head>
-              <meta charset="UTF-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <title>${getString('rasterDownloadTitle')}</title>
-              <style>
-                * { margin: 0; padding: 0; box-sizing: border-box; }
-                body {
-                  width: 100vw; min-height: 100vh;
-                  display: flex; flex-direction: column;
-                  align-items: center;
-                  background-color: #f0f4f8;
-                  font-family: 'Segoe UI', Arial, sans-serif;
-                  padding: 2rem;
-                }
-                .container {
-                  max-width: 800px; width: 100%;
-                  background: #ffffff;
-                  border-radius: 12px;
-                  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-                  padding: 2.5rem;
-                  margin-top: 2rem;
-                  text-align: center;
-                }
-                .success-icon { font-size: 64px; margin-bottom: 1rem; }
-                h1 { color: #000000; font-size: 1.8rem; margin-bottom: 1rem; }
-                .message { color: #555; font-size: 1.1rem; margin-bottom: 0.5rem; line-height: 1.6; }
-                .sub-message { color: #888; font-size: 0.95rem; margin-bottom: 2rem; }
-                .download-button {
-                  display: inline-block;
-                  font-size: 1.3rem; font-weight: 700;
-                  color: #ffffff; background: #007ac2;
-                  padding: 1rem 2.5rem;
-                  border-radius: 10px;
-                  text-decoration: none;
-                  transition: background 0.2s, transform 0.1s;
-                  margin-bottom: 1.5rem;
-                  border: none; cursor: pointer;
-                }
-                .download-button:hover { background: #007ac2; transform: scale(1.02); }
-                .download-button:active { transform: scale(0.98); }
-                .file-list {
-                  text-align: left; margin: 0 auto; max-width: 500px;
-                  background: #f8fafc; border: 1px solid #e2e8f0;
-                  border-radius: 8px; padding: 1rem 1.5rem;
-                  list-style: none;
-                }
-                .file-list li { padding: 0.3rem 0; font-size: 0.9rem; color: #555; word-break: break-all; }
-                .note { margin-top: 1rem; font-size: 0.85rem; color: #aaa; }
-              </style>
-            </head>
-            <body>
-              <div class="container">
-                <h1>${getString('rasterDownloadSuccessText')}</h1>
-
-                <a href="${zipBlobUrl}" download="${zipFileName}" class="download-button" id="download-zip-btn">
-                  ${getString('downloadZipText')}
-                </a>
-
-                <ul class="file-list">
-                  ${fileListHtml}
-                </ul>
-
-                <p class="note">${getString('rasterDownloadNoteText')}</p>
-              </div>
-            </body>
-          </html>`
-            ],
-            { type: 'text/html;charset=utf-8' }
-          )
-        );
+        const safeProductName = selectedProduct.name.replace(/[\\/:*?"<>|]/g, '_');
+        const zipFileName = `${safeProductName}_${new Date().getTime()}.zip`;
+        finishRasterExport(exportJob, { blob: zipBlob, fileName: zipFileName });
       })
       .catch((error) => {
-        console.error('ArcGIS download failed:', error);
-        // If the session was invalid/expired, onInvalidSession() above already cleared it and
-        // kicked off a fresh sign-in — opening the fallback link would just hit the same expired
-        // token and fail again, so skip it in that case.
         if (sessionExpired) {
           return;
         }
-        // Fallback: open the HTML page directly
-        const fallbackUrl = jsonUrl.replace('f=json', 'f=html');
-        const fallbackWindow = window.open(fallbackUrl, '_blank');
-        if (!fallbackWindow) {
-          alert(getString('popupBlockedDownloadAlertText'));
-        }
+        reportError(error);
       });
   }
 
-  /* Wires up the ArcGIS OAuth flow: exposes window.oauthCallback for the popup redirect,
-     restores a saved session from localStorage.
-     onAuthChange is called whenever the session changes so
-     geouttag.js can keep its own arcgisSession state in sync. */
-  function setupArcGISAuth({ onAuthChange } = {}) {
-    function updateAuthUI(sessionInfo) {
-      const userInfoEl = document.getElementById(userInfoComp.getId());
+  function resumePendingRasterExports(authWindow) {
+    if (!currentSession || !currentSession.access_token || pendingRasterExports.size === 0) return false;
 
-      if (!sessionInfo) {
-        localStorage.removeItem('__ARCGIS_USER_SESSION__');
-        userInfoEl.style.display = 'none';
-        userInfoEl.innerHTML = '';
+    const pendingJobs = Array.from(pendingRasterExports);
+    const keepAuthWindow = pendingJobs.some((job) => job.progressWindow === authWindow);
+    pendingJobs.forEach((job) => pendingRasterExports.delete(job));
+    rasterAuthInProgress = false;
+    rasterAuthWindow = null;
+    clearRasterAuthMonitor();
+
+    pendingJobs.forEach((job) => {
+      if (job.progressWindow === authWindow && !job.progressWindow.closed) {
+        writeExportProgressWindow(
+          job.progressWindow,
+          getString('downloadingRasterTitle'),
+          getString('downloadingRasterText')
+        );
       } else {
-        localStorage.setItem('__ARCGIS_USER_SESSION__', JSON.stringify(sessionInfo));
-        userInfoEl.style.display = '';
+        updateExportProgressWindow(job.progressWindow, getString('downloadingRasterText'));
+      }
+      sendArcGISRequest(currentSession, job);
+    });
+    return keepAuthWindow;
+  }
+
+  function startExport({
+    productName, outputFormat, coords, x1, y1, x2, y2
+  }) {
+    const hasValidSession = isArcGISSessionValid(currentSession);
+    const progressWindow = openExportProgressWindow(
+      getString('downloadingRasterTitle'),
+      getString(hasValidSession ? 'downloadingRasterText' : 'waitingForArcgisAuthText'),
+      hasValidSession
+    );
+    if (!progressWindow) {
+      alert(getString('popupBlockedExportAlertText'));
+      return false;
+    }
+
+    const exportJob = {
+      progressWindow,
+      selection: { productName, outputFormat },
+      geometry: {
+        coords: Array.isArray(coords) ? coords.map((coordinate) => coordinate.slice()) : coords,
+        x1,
+        y1,
+        x2,
+        y2
+      }
+    };
+    if (hasValidSession) {
+      sendArcGISRequest(currentSession, exportJob);
+    } else {
+      queueRasterExportForAuth(exportJob);
+    }
+    return true;
+  }
+
+  /* Wires up the ArcGIS OAuth flow and restores a saved session from localStorage. */
+  function setupArcGISAuth({ onAuthChange, onAuthFailure } = {}) {
+    onAuthChangeCallback = onAuthChange;
+    onAuthFailureCallback = onAuthFailure;
+
+    function updateAuthUI(sessionInfo, authWindow) {
+      currentSession = sessionInfo || null;
+      const userInfoEl = userInfoComp && document.getElementById(userInfoComp.getId());
+
+      if (!currentSession) {
+        localStorage.removeItem('__ARCGIS_USER_SESSION__');
+        if (userInfoEl) {
+          userInfoEl.style.display = 'none';
+          userInfoEl.innerHTML = '';
+        }
+      } else {
+        localStorage.setItem('__ARCGIS_USER_SESSION__', JSON.stringify(currentSession));
+        if (userInfoEl) userInfoEl.style.display = '';
       }
 
-      if (onAuthChange) onAuthChange(sessionInfo);
+      if (onAuthChangeCallback) onAuthChangeCallback(currentSession);
+      if (currentSession && currentSession.access_token) {
+        return resumePendingRasterExports(authWindow);
+      }
+      return false;
+    }
+
+    function handleAuthFailure(error, authWindow) {
+      console.error('ArcGIS sign-in failed:', error);
+      if (onAuthFailureCallback) onAuthFailureCallback(error);
+      const keepAuthWindow = Array.from(pendingRasterExports)
+        .some((job) => job.progressWindow === authWindow);
+      failPendingRasterAuth(error);
+      return keepAuthWindow;
     }
 
     // Expose oauthCallback on window so the OAuth popup can reach it.
     // Access the response from the endpoint. If the request was valid,
     // the response will contain an access_token, refresh_token, username, and other session information
-    window.oauthCallback = async (authResponse) => {
+    window.oauthCallback = async (authResponse, authWindow, authError) => {
       try {
+        if (authError) {
+          return handleAuthFailure(new Error(authError), authWindow);
+        }
+
         // PKCE flow — authResponse is an authorization code string
         if (typeof authResponse === 'string' && authResponse.length > 0) {
           const redirectUri = window.location.href;
@@ -460,19 +557,21 @@ const ImageServer = function ImageServer(options = {}) {
             })
           });
           if (!response.ok) {
-            console.error('ArcGIS token exchange failed:', response.status, await response.text());
-            return;
+            const responseText = await response.text();
+            const error = new Error(`ArcGIS token exchange failed: ${response.status} ${responseText}`);
+            console.error(error);
+            return handleAuthFailure(error, authWindow);
           }
           const sessionInfo = await response.json();
           if (sessionInfo.access_token) {
             if (sessionInfo.expires_in) {
               sessionInfo.expires_at = Date.now() + (Number(sessionInfo.expires_in) * 1000);
             }
-            updateAuthUI(sessionInfo);
-          } else {
-            console.error('ArcGIS OAuth failed: no access_token in response', sessionInfo);
+            return updateAuthUI(sessionInfo, authWindow) === true;
           }
-          return;
+          const error = new Error('ArcGIS OAuth failed: no access_token in response');
+          console.error(error, sessionInfo);
+          return handleAuthFailure(error, authWindow);
         }
         // Implicit grant fallback — authResponse is an object with access_token
         if (authResponse && authResponse.access_token) {
@@ -480,13 +579,14 @@ const ImageServer = function ImageServer(options = {}) {
           if (responseObj.expires_in && !responseObj.expires_at) {
             responseObj.expires_at = Date.now() + (Number(authResponse.expires_in) * 1000);
           }
-          // See note above — download is triggered by geouttag.js's pendingRasterExport flow.
-          updateAuthUI(responseObj);
-          return;
+          return updateAuthUI(responseObj, authWindow) === true;
         }
-        console.error('ArcGIS OAuth failed: unrecognized response', authResponse);
+        const error = new Error('ArcGIS OAuth failed: unrecognized response');
+        console.error(error, authResponse);
+        return handleAuthFailure(error, authWindow);
       } catch (e) {
         console.error('ArcGIS OAuth callback error', e);
+        return handleAuthFailure(e, authWindow);
       }
     };
 
@@ -512,6 +612,7 @@ const ImageServer = function ImageServer(options = {}) {
   return {
     name: 'ImageServer',
     sendArcGISRequest,
+    startExport,
     generateRandomString,
     challengeFromVerifier,
     openArcGISAuth,

@@ -25,7 +25,8 @@ The plugin can be loaded like this in an html-file:
 
       const geouttag = Geouttag({
         fmeFlowDataDownloadUrl: "URL to geouttag_fme_api", // ("https://ikarta.eskilstuna.se/api/geouttag/export")
-        arcgisTokenEndpoint: "URL to arcgisTokenEndPoint", // (http://127.0.0.1:5173/portal/sharing/rest/oauth2/token)
+        arcgisAuthorizationEndpoint: "URL to arcgisAuthorizationEndpoint", // (https://domain.se/portal/sharing/rest/oauth2/authorize)
+        arcgisTokenEndpoint: "URL to arcgisTokenEndPoint", // (https://domain.se/portal/sharing/rest/oauth2/token)
         // Coordinate systems offered in the export UI, as EPSG codes
         coordSyses: [
           {ref: "3010", title: "SWEREF99 16 30"},

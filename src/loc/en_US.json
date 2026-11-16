@@ -22,6 +22,7 @@
         "exportErrorText": "An error occured during export, please try again.",
         "popupBlockedDownloadAlertText": "Failed to open download window. Please make sure popups are not blocked..",
         "downloadingRasterTitle": "Downloading raster...",
+        "waitingForArcgisAuthText": "Waiting for you to authenticate in the ArcGIS window...",
         "downloadingRasterText": "Downloading raster from imageserver...",
         "creatingZipText": "Creating a zip file once the download finishes",
         "rasterDownloadTitle": "Raster download",

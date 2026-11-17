@@ -67,6 +67,7 @@ const ImageServer = function ImageServer(options = {}) {
     arcgisClientId,
     arcgisTokenEndpoint,
     arcgisAuthorizationEndpoint,
+    arcgisDownloadUrl,
     userInfoComp,
     getString
   } = options;
@@ -346,7 +347,7 @@ const ImageServer = function ImageServer(options = {}) {
     let sessionExpired = false;
 
     // Build the base ImageServer download URL (use f=json to get individual file URLs)
-    const jsonUrl = `https://geo.eskilstuna.se/imageserver/rest/services/${selectedProduct.name}/ImageServer/download?rasterIds=1&geometry=${encodeURIComponent(geometry)}&geometryType=${geometryType}&format=${selectedFormat}&f=json&token=${token}`;
+    const jsonUrl = `${arcgisDownloadUrl}/${selectedProduct.name}/ImageServer/download?rasterIds=1&geometry=${encodeURIComponent(geometry)}&geometryType=${geometryType}&format=${selectedFormat}&f=json&token=${token}`;
 
     fetch(jsonUrl)
       .then((response) => {

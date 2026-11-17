@@ -28,7 +28,8 @@ const Geouttag = function Geouttag(options = {}) {
     drawlayerTitle = '',
     arcgisClientId = import.meta.env.VITE_ARC_GIS_CLIENT_ID || '',
     arcgisTokenEndpoint = '',
-    arcgisAuthorizationEndpoint = ''
+    arcgisAuthorizationEndpoint = '',
+    arcgisDownloadUrl = ''
 
   } = options;
 
@@ -1051,6 +1052,7 @@ const Geouttag = function Geouttag(options = {}) {
         arcgisClientId,
         arcgisTokenEndpoint,
         arcgisAuthorizationEndpoint,
+        arcgisDownloadUrl,
         userInfoComp,
         getString
       });

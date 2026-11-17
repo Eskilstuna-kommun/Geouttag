@@ -246,6 +246,7 @@ const Geouttag = function Geouttag(options = {}) {
       const layerOptionElement = Origo.ui.Element({
         tagName: 'div',
         cls: 'option',
+        style: 'font-family: Arial, sans-serif; font-size: 0.875rem; line-height: 1.25rem; color: inherit;',
         innerHTML: layer.title,
         attributes: {
           data: {
@@ -697,7 +698,7 @@ const Geouttag = function Geouttag(options = {}) {
           placeholder: getConfiguredLayersExist() ? getString('selectMapLayerPlaceholder') : getString('noMapLayersText'),
           disabled: !(getConfiguredLayersExist())
         },
-        cls: `select-input custom-select-input text-small ${(getConfiguredLayersExist()) ? '' : 'disabled'}`
+        cls: `select-input custom-select-input ${(getConfiguredLayersExist()) ? '' : 'disabled'}`
       });
 
       layersSelectOptionsDropdown = Origo.ui.Element({

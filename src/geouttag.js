@@ -26,7 +26,7 @@ const Geouttag = function Geouttag(options = {}) {
     layersConf = {},
     coordSyses = [],
     drawlayerTitle = '',
-    arcgisClientId = import.meta.env.VITE_ARC_GIS_CLIENT_ID || '',
+    arcgisClientId = '',
     arcgisTokenEndpoint = '',
     arcgisAuthorizationEndpoint = '',
     arcgisDownloadUrl = ''

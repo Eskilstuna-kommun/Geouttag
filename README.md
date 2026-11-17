@@ -25,6 +25,7 @@ The plugin can be loaded like this in an html-file:
 
       const geouttag = Geouttag({
         fmeFlowDataDownloadUrl: "URL to geouttag_fme_api", // ("https://ikarta.eskilstuna.se/api/geouttag/export")
+        arcgisClientId: "client-id",
         arcgisAuthorizationEndpoint: "URL to arcgisAuthorizationEndpoint", // (https://domain.se/portal/sharing/rest/oauth2/authorize)
         arcgisTokenEndpoint: "URL to arcgisTokenEndPoint", // (https://domain.se/portal/sharing/rest/oauth2/token)
         arcgisDownloadUrl: "URL to arcgisDownloadUrl", // (https://domain.se/imageserver/rest/services)
@@ -144,5 +145,4 @@ The plugin can be loaded like this in an html-file:
 - `coordSyses` (optional) is an array of EPSG codes (e.g. `["3010", "3006", "4326", "3857", "3021"]`) rendered as a coordinate system dropdown in the UI. The selection is sent to FME Flow as the `crs` parameter (e.g. `crs=EPSG:3006`). When omitted, no dropdown is shown and no `crs` parameter is sent.
 - `maxArea` (optional, km²) may be declared per product and per layer to cap the exportable area. When several layers are selected, the smallest `maxArea` among them applies. While no product or layer is selected, no area limit is applied. An area exceeding the limit is warning-styled while sketching and stays warning-styled once the sketch is finished, and the export button stays disabled.
 - `wholeExportable` (optional, boolean) may be declared per product (not for `imageServer` products, for which it is disregarded) and per layer to mark an export that can be delivered in its entirety, without a drawn geometry defining an export area. When every selected item is `wholeExportable`, the export button can be enabled without a sketch, and the export is posted without a `geom` parameter. A `wholeExportable` layer that is exported together with layers that need a geometry is cut by the drawn geometry just like everything else.
-- The FME Flow token is read from the `VITE_FME_FLOW_TOKEN` environment variable at build time (see `.env.example`).
-- ArcGIS OAuth settings (`VITE_ARC_GIS_CLIENT_ID`) are also read from the plugin's `.env` file at build time. Copy `.env.example` to `.env`, set the values, then run `npm start` from this `Geouttag` directory. Restart `npm start` after changing `.env`; the running Origo app only sees the values embedded in the newly built plugin bundle.
+- To not exponate an fme token an API has been created that Geouttag requests to communicate with FME Flow without exponate an fme token. That API is hosted on the same server as Geouttag. All FME Workspaces that Geouttag-export run must be defined in an .env for that API.

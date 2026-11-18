@@ -525,7 +525,7 @@ const Geouttag = function Geouttag(options = {}) {
         type: 'GEOJSON',
         drawlayer: true,
         zIndex: 7,
-        group: 'root',
+        group: 'none',
         style: styleFunction
       });
       map.addLayer(layer);

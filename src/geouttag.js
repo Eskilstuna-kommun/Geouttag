@@ -29,7 +29,8 @@ const Geouttag = function Geouttag(options = {}) {
     arcgisClientId = '',
     arcgisTokenEndpoint = '',
     arcgisAuthorizationEndpoint = '',
-    arcgisDownloadUrl = ''
+    arcgisDownloadUrl = '',
+    svgResourcePath = 'plugins/geouttag/material-icons.svg'
 
   } = options;
 
@@ -70,7 +71,7 @@ const Geouttag = function Geouttag(options = {}) {
   const filetypesById = {};
   let localizationControl = null;
 
-  loadSVGs();
+  loadSVGs({ svgResourcePath });
 
   // Registers the plugin's strings with Origo's localization control so they can be
   // translated or overridden per map and user (see https://origo-map.github.io/origo-documentation/latest/#add-locales).

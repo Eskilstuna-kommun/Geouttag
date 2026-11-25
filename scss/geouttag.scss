@@ -67,6 +67,58 @@
   opacity: 1;
 }
 
+.geouttag-clear-shape {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 8;
+  overflow: visible;
+}
+
+.geouttag-clear-polygon {
+  fill: rgba(0, 153, 255, 0.12);
+  stroke: rgba(0, 153, 255, 0.75);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  transform-box: view-box;
+  animation: geouttag-clear-inward 1100ms ease-in forwards;
+}
+
+@keyframes geouttag-clear-inward {
+  0% {
+    opacity: 0.75;
+    transform: scale(1);
+    fill: rgba(0, 153, 255, 0.12);
+    stroke: rgba(0, 153, 255, 0.75);
+  }
+  35% {
+    opacity: 0.55;
+    transform: scale(0.82);
+    fill: rgba(130, 130, 130, 0.12);
+    stroke: rgba(130, 130, 130, 0.65);
+  }
+  75% {
+    opacity: 0.25;
+    transform: scale(0.35);
+    fill: rgba(128, 128, 128, 0.08);
+    stroke: rgba(128, 128, 128, 0.45);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.08);
+    fill: rgba(128, 128, 128, 0);
+    stroke: rgba(128, 128, 128, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .geouttag-clear-shape {
+    display: none;
+  }
+}
+
     /*.geouttag-close:hover,
     .geouttag-close:focus {
         color: black;

@@ -581,6 +581,60 @@ const Geouttag = function Geouttag(options = {}) {
     return drawInteraction;
   }
 
+  function animateGeouttagClear() {
+    try {
+      if (!geouttagLayer || typeof geouttagLayer.getSource !== 'function') return;
+
+      const features = geouttagLayer.getSource().getFeatures();
+      if (!features.length) return;
+
+      const geometry = features[0].getGeometry();
+      if (!geometry || geometry.getType() !== 'Polygon') return;
+
+      const extent = geometry.getExtent();
+      const centerCoordinate = [
+        (extent[0] + extent[2]) / 2,
+        (extent[1] + extent[3]) / 2
+      ];
+      const centerPixel = map.getPixelFromCoordinate(centerCoordinate);
+      const viewport = typeof map.getViewport === 'function' ? map.getViewport() : null;
+
+      if (!centerPixel || !viewport) return;
+
+      const svgNamespace = 'http://www.w3.org/2000/svg';
+      const shape = document.createElementNS(svgNamespace, 'svg');
+      shape.classList.add('geouttag-clear-shape');
+      shape.setAttribute('width', '100%');
+      shape.setAttribute('height', '100%');
+      shape.setAttribute('aria-hidden', 'true');
+
+      geometry.getCoordinates().forEach((ring) => {
+        const points = ring.map((coordinate) => {
+          const pixel = map.getPixelFromCoordinate(coordinate);
+          return pixel ? `${pixel[0]},${pixel[1]}` : null;
+        }).filter(Boolean).join(' ');
+
+        if (!points) return;
+
+        const polygon = document.createElementNS(svgNamespace, 'polygon');
+        polygon.setAttribute('points', points);
+        polygon.style.transformOrigin = `${centerPixel[0]}px ${centerPixel[1]}px`;
+        polygon.classList.add('geouttag-clear-polygon');
+        shape.appendChild(polygon);
+      });
+
+      if (!shape.childElementCount) return;
+      viewport.appendChild(shape);
+
+      shape.addEventListener('animationend', () => {
+        shape.remove();
+      }, { once: true });
+      setTimeout(() => shape.remove(), 1200);
+    } catch (err) {
+      console.warn('Could not animate cleared geouttag geometry:', err);
+    }
+  }
+
   // Function to change draw tool
   function changeDrawTool(toolType) {
     // Only change the interaction if geouttag is currently active
@@ -589,6 +643,7 @@ const Geouttag = function Geouttag(options = {}) {
       if (geouttag) {
         map.removeInteraction(geouttag);
       }
+      animateGeouttagClear();
       // Clear any existing features so export state sees no selection
       try {
         if (geouttagLayer && geouttagLayer.getSource) {

@@ -3,13 +3,12 @@
 Geouttag plugin for Origo using FME server Web Services. The user may draw a rectangle over the area to be exported, as well as choose a list of predefined layers/data sources to export.
 
 (<i>Is compatible with Origo v2.9</i>)
-
-Layers in the map meant to be exportable via this plugin can be indicated via a `geouttag: true` prop.
-These layers share a configuration, including export formats, possible via wfs for instance, as well as an FME Flow workspace.
+Layers to be exported are predefined.
+These layers share a configuration, including export formats as well as an FME Flow workspace.
 
 #### Example usage of Geouttag as plugin
 
-The plugin can be loaded like this in an html-file:
+The plugin can be defined and run like so:
 
 ```html
 <head>
@@ -24,7 +23,7 @@ The plugin can be loaded like this in an html-file:
       origo.on('load', function(viewer) {
 
       const geouttag = Geouttag({
-        fmeFlowDataDownloadUrl: "URL to geouttag_fme_api", // ("https://ikarta.eskilstuna.se/api/geouttag/export")
+        fmeFlowDataDownloadUrl: "URL to geouttag_fme_api", // ("https://domain.se/api/geouttag/export")
         arcgisClientId: "client-id",
         arcgisAuthorizationEndpoint: "URL to arcgisAuthorizationEndpoint", // (https://domain.se/portal/sharing/rest/oauth2/authorize)
         arcgisTokenEndpoint: "URL to arcgisTokenEndPoint", // (https://domain.se/portal/sharing/rest/oauth2/token)
@@ -146,4 +145,4 @@ The plugin can be loaded like this in an html-file:
 - `coordSyses` (optional) is an array of EPSG codes (e.g. `["3010", "3006", "4326", "3857", "3021"]`) rendered as a coordinate system dropdown in the UI. The selection is sent to FME Flow as the `crs` parameter (e.g. `crs=EPSG:3006`). When omitted, no dropdown is shown and no `crs` parameter is sent.
 - `maxArea` (optional, km²) may be declared per product and per layer to cap the exportable area. When several layers are selected, the smallest `maxArea` among them applies. While no product or layer is selected, no area limit is applied. An area exceeding the limit is warning-styled while sketching and stays warning-styled once the sketch is finished, and the export button stays disabled.
 - `wholeExportable` (optional, boolean) may be declared per product (not for `imageServer` products, for which it is disregarded) and per layer to mark an export that can be delivered in its entirety, without a drawn geometry defining an export area. When every selected item is `wholeExportable`, the export button can be enabled without a sketch, and the export is posted without a `geom` parameter. A `wholeExportable` layer that is exported together with layers that need a geometry is cut by the drawn geometry just like everything else.
-- To not exponate an fme token an API has been created that Geouttag requests to communicate with FME Flow without exponate an fme token. That API is hosted on the same server as Geouttag. All FME Workspaces that Geouttag-export run must be defined in an .env for that API.
+- To not expose an fme token an API has been created that Geouttag requests to communicate with FME Flow without exposing an fme token. That API is hosted on the same server as Geouttag. All FME Workspaces that Geouttag-export run must be defined in an .env for that API.
